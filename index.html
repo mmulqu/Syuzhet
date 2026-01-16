@@ -35,23 +35,120 @@
   </script>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; background: #1a1a1a; min-height: 100vh; }
+    
+    /* Theme Variables */
+    :root {
+      /* Dark Theme (default) */
+      --bg-primary: #1a1a1a;
+      --bg-secondary: #242424;
+      --bg-tertiary: #2d2d2d;
+      --bg-input: #1a1a1a;
+      --text-primary: #f5f2eb;
+      --text-secondary: #a0a0a0;
+      --text-muted: #4a5568;
+      --border-color: rgba(74, 85, 104, 0.3);
+      --border-light: rgba(74, 85, 104, 0.15);
+      --accent-gold: #c9a227;
+      --accent-gold-dim: #9a7b1c;
+      --accent-crimson: #8b2942;
+      --scrollbar-thumb: #4a5568;
+      --chat-user-bg: rgba(74, 85, 104, 0.2);
+      --chat-assistant-bg: rgba(245, 242, 235, 0.05);
+      --chat-assistant-border: rgba(74, 85, 104, 0.1);
+    }
+    
+    [data-theme="light"] {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f8f9fa;
+      --bg-tertiary: #e9ecef;
+      --bg-input: #ffffff;
+      --text-primary: #1a1a1a;
+      --text-secondary: #495057;
+      --text-muted: #6c757d;
+      --border-color: rgba(0, 0, 0, 0.12);
+      --border-light: rgba(0, 0, 0, 0.06);
+      --accent-gold: #9a7b1c;
+      --accent-gold-dim: #7a5f14;
+      --accent-crimson: #8b2942;
+      --scrollbar-thumb: #adb5bd;
+      --chat-user-bg: #e9ecef;
+      --chat-assistant-bg: #f8f9fa;
+      --chat-assistant-border: rgba(0, 0, 0, 0.08);
+    }
+    
+    [data-theme="sepia"] {
+      --bg-primary: #f4ecd8;
+      --bg-secondary: #ebe3ce;
+      --bg-tertiary: #e0d6be;
+      --bg-input: #faf6eb;
+      --text-primary: #5c4b37;
+      --text-secondary: #7a6a56;
+      --text-muted: #9a8b78;
+      --border-color: rgba(92, 75, 55, 0.2);
+      --border-light: rgba(92, 75, 55, 0.1);
+      --accent-gold: #8b6914;
+      --accent-gold-dim: #6b510f;
+      --accent-crimson: #8b2942;
+      --scrollbar-thumb: #c4b59d;
+      --chat-user-bg: #e8dfca;
+      --chat-assistant-bg: #f9f5ea;
+      --chat-assistant-border: rgba(92, 75, 55, 0.12);
+      
+      /* Special sepia typography */
+      --font-body-sepia: 'Literata', 'Georgia', serif;
+    }
+    
+    body { 
+      margin: 0; 
+      background: var(--bg-primary); 
+      min-height: 100vh;
+      transition: background-color 0.3s ease;
+    }
+    
     .scrollbar-thin::-webkit-scrollbar { width: 6px; }
     .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-    .scrollbar-thin::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 3px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    
     .prose-content { line-height: 1.8; }
     .prose-content p { margin-bottom: 1em; }
+    
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
     .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+    
     @keyframes pulse-gold {
       0%, 100% { box-shadow: 0 0 0 0 rgba(201, 162, 39, 0.4); }
       50% { box-shadow: 0 0 0 8px rgba(201, 162, 39, 0); }
     }
     .pulse-gold { animation: pulse-gold 2s infinite; }
+    
+    /* Sepia mode special styles - warm paper feel */
+    [data-theme="sepia"] .paper-texture {
+      background-image: 
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    }
+    
+    [data-theme="sepia"] textarea,
+    [data-theme="sepia"] .prose-editor {
+      font-family: 'Literata', 'Georgia', 'Times New Roman', serif !important;
+      font-size: 1.05rem;
+      line-height: 1.9;
+      letter-spacing: 0.01em;
+    }
+    
+    /* Page shadow effect for sepia mode */
+    [data-theme="sepia"] .page-container {
+      box-shadow: 
+        0 1px 3px rgba(92, 75, 55, 0.08),
+        0 4px 12px rgba(92, 75, 55, 0.04),
+        inset 0 0 80px rgba(92, 75, 55, 0.03);
+    }
   </style>
+  
+  <!-- Extra font for sepia mode -->
+  <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="root"></div>
@@ -251,6 +348,56 @@ Rules:
     };
 
     // ============================================
+    // THEME DEFINITIONS
+    // ============================================
+    const THEMES = {
+      dark: {
+        id: 'dark',
+        name: 'Dark',
+        icon: '🌙',
+        description: 'Easy on the eyes for late-night writing'
+      },
+      light: {
+        id: 'light', 
+        name: 'Light',
+        icon: '☀️',
+        description: 'Clean and bright'
+      },
+      sepia: {
+        id: 'sepia',
+        name: 'Paper',
+        icon: '📜',
+        description: 'Warm, like writing on real paper'
+      }
+    };
+
+    // Theme toggle component
+    function ThemeToggle({ currentTheme, onThemeChange }) {
+      return (
+        <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+          {Object.values(THEMES).map(theme => (
+            <button
+              key={theme.id}
+              onClick={() => onThemeChange(theme.id)}
+              title={theme.description}
+              className={`px-2 py-1 text-sm rounded transition-all ${
+                currentTheme === theme.id
+                  ? 'shadow-sm'
+                  : 'opacity-60 hover:opacity-100'
+              }`}
+              style={{
+                backgroundColor: currentTheme === theme.id ? 'var(--bg-primary)' : 'transparent',
+                color: 'var(--text-primary)'
+              }}
+            >
+              {theme.icon}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    // ============================================
     // API CALL FUNCTIONS
     // ============================================
     async function callAnthropic(apiKey, model, systemPrompt, messages) {
@@ -346,6 +493,9 @@ Rules:
       });
       const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929');
       
+      // Theme state
+      const [theme, setTheme] = useState('dark');
+      
       // App state
       const [currentAgent, setCurrentAgent] = useState('architect');
       const [currentChatId, setCurrentChatId] = useState(null);
@@ -356,8 +506,22 @@ Rules:
       const [view, setView] = useState('chat'); // chat, bible, chapters, settings
       const [isLoading, setIsLoading] = useState(false);
 
+      // Apply theme to document
+      useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+      }, [theme]);
+
+      // Save/load theme
+      const saveTheme = (newTheme) => {
+        setTheme(newTheme);
+        Storage.set('theme', newTheme);
+      };
+
       // Load initial state
       useEffect(() => {
+        const savedTheme = Storage.get('theme');
+        if (savedTheme && THEMES[savedTheme]) setTheme(savedTheme);
+        
         const savedKeys = Storage.get('api_keys') || {};
         setApiKeys(prev => ({ ...prev, ...savedKeys }));
         
@@ -537,29 +701,32 @@ Rules:
 
       // First-time setup screen
       if (!hasAnyKey) {
-        return <WelcomeScreen apiKeys={apiKeys} onSaveKey={saveApiKey} />;
+        return <WelcomeScreen apiKeys={apiKeys} onSaveKey={saveApiKey} theme={theme} onThemeChange={saveTheme} />;
       }
 
       const agentChats = Object.values(chats).filter(c => c.agentId === currentAgent).sort((a, b) => b.updatedAt - a.updatedAt);
       const currentChat = currentChatId ? chats[currentChatId] : null;
 
       return (
-        <div className="min-h-screen bg-ink flex">
+        <div className="min-h-screen flex" style={{ backgroundColor: 'var(--bg-primary)' }}>
           {/* Sidebar */}
-          <div className="w-64 bg-ink border-r border-slate/20 flex flex-col">
-            {/* Logo */}
-            <div className="p-6 border-b border-slate/20">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl text-gold">◈</span>
-                <div>
-                  <h1 className="font-display text-2xl text-parchment">Syuzhet</h1>
-                  <p className="text-slate text-xs tracking-wider">CONTROL PANEL</p>
+          <div className="w-64 flex flex-col" style={{ backgroundColor: 'var(--bg-primary)', borderRight: '1px solid var(--border-color)' }}>
+            {/* Logo + Theme Toggle */}
+            <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl" style={{ color: 'var(--accent-gold)' }}>◈</span>
+                  <div>
+                    <h1 className="font-display text-2xl" style={{ color: 'var(--text-primary)' }}>Syuzhet</h1>
+                    <p className="text-xs tracking-wider" style={{ color: 'var(--text-muted)' }}>CONTROL PANEL</p>
+                  </div>
                 </div>
               </div>
+              <ThemeToggle currentTheme={theme} onThemeChange={saveTheme} />
             </div>
             
             {/* Navigation */}
-            <div className="p-4 border-b border-slate/20">
+            <div className="p-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
               <div className="flex gap-1">
                 {[
                   { id: 'chat', label: 'Chat', icon: '◇' },
@@ -570,11 +737,11 @@ Rules:
                   <button
                     key={tab.id}
                     onClick={() => setView(tab.id)}
-                    className={`flex-1 py-2 text-xs font-body rounded transition-colors ${
-                      view === tab.id 
-                        ? 'bg-gold/20 text-gold' 
-                        : 'text-slate hover:text-parchment'
-                    }`}
+                    className="flex-1 py-2 text-xs font-body rounded transition-colors"
+                    style={{
+                      backgroundColor: view === tab.id ? 'rgba(201,162,39,0.2)' : 'transparent',
+                      color: view === tab.id ? 'var(--accent-gold)' : 'var(--text-muted)'
+                    }}
                   >
                     <span className="mr-1">{tab.icon}</span>
                     {tab.label}
@@ -584,12 +751,17 @@ Rules:
             </div>
             
             {/* Model selector */}
-            <div className="p-4 border-b border-slate/20">
-              <p className="text-slate text-xs uppercase tracking-wider mb-2">Model</p>
+            <div className="p-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Model</p>
               <select
                 value={selectedModel}
                 onChange={(e) => saveSelectedModel(e.target.value)}
-                className="w-full bg-ink border border-slate/30 rounded px-3 py-2 text-sm text-parchment focus:border-gold focus:outline-none"
+                className="w-full rounded px-3 py-2 text-sm focus:outline-none"
+                style={{
+                  backgroundColor: 'var(--bg-input)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-primary)'
+                }}
               >
                 <optgroup label="Anthropic">
                   {Object.entries(MODELS).filter(([_, m]) => m.provider === 'anthropic').map(([id, m]) => (
@@ -608,37 +780,33 @@ Rules:
                 </optgroup>
               </select>
               {!hasValidKey && (
-                <p className="text-crimson text-xs mt-2">⚠ No API key for {PROVIDERS[currentProvider]?.name}</p>
+                <p className="text-xs mt-2" style={{ color: 'var(--accent-crimson)' }}>⚠ No API key for {PROVIDERS[currentProvider]?.name}</p>
               )}
             </div>
             
             {/* Agent selector */}
-            <div className="p-4 border-b border-slate/20">
-              <p className="text-slate text-xs uppercase tracking-wider mb-3">Agents</p>
+            <div className="p-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <p className="text-xs uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Agents</p>
               <div className="space-y-1">
                 {Object.values(AGENTS).map(agent => (
                   <button
                     key={agent.id}
                     onClick={() => { setCurrentAgent(agent.id); setView('chat'); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left transition-all ${
-                      currentAgent === agent.id
-                        ? 'border'
-                        : 'text-slate hover:text-parchment hover:bg-slate/10'
-                    }`}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded text-left transition-all"
                     style={currentAgent === agent.id ? {
                       backgroundColor: agent.color === 'gold' ? 'rgba(201,162,39,0.2)' :
                                        agent.color === 'emerald' ? 'rgba(16,185,129,0.2)' :
                                        agent.color === 'rose' ? 'rgba(244,63,94,0.2)' :
                                        'rgba(139,92,246,0.2)',
-                      borderColor: agent.color === 'gold' ? 'rgba(201,162,39,0.3)' :
+                      border: `1px solid ${agent.color === 'gold' ? 'rgba(201,162,39,0.3)' :
                                    agent.color === 'emerald' ? 'rgba(16,185,129,0.3)' :
                                    agent.color === 'rose' ? 'rgba(244,63,94,0.3)' :
-                                   'rgba(139,92,246,0.3)',
+                                   'rgba(139,92,246,0.3)'}`,
                       color: agent.color === 'gold' ? '#c9a227' :
                              agent.color === 'emerald' ? '#10b981' :
                              agent.color === 'rose' ? '#f43f5e' :
                              '#8b5cf6'
-                    } : {}}
+                    } : { color: 'var(--text-muted)' }}
                   >
                     <span className="text-lg">{agent.icon}</span>
                     <div>
@@ -654,10 +822,11 @@ Rules:
             {view === 'chat' && (
               <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-slate text-xs uppercase tracking-wider">Conversations</p>
+                  <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Conversations</p>
                   <button
                     onClick={() => createChat(currentAgent)}
-                    className="text-gold hover:text-gold-dim text-lg"
+                    className="text-lg"
+                    style={{ color: 'var(--accent-gold)' }}
                     title="New conversation"
                   >
                     +
@@ -667,24 +836,25 @@ Rules:
                   {agentChats.map(chat => (
                     <div
                       key={chat.id}
-                      className={`group flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-colors ${
-                        currentChatId === chat.id
-                          ? 'bg-slate/20 text-parchment'
-                          : 'text-slate hover:text-parchment hover:bg-slate/10'
-                      }`}
+                      className="group flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-colors"
                       onClick={() => setCurrentChatId(chat.id)}
+                      style={{
+                        backgroundColor: currentChatId === chat.id ? 'var(--bg-tertiary)' : 'transparent',
+                        color: currentChatId === chat.id ? 'var(--text-primary)' : 'var(--text-muted)'
+                      }}
                     >
                       <span className="flex-1 text-sm truncate">{chat.title}</span>
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}
-                        className="opacity-0 group-hover:opacity-100 text-slate hover:text-crimson text-xs"
+                        className="opacity-0 group-hover:opacity-100 text-xs"
+                        style={{ color: 'var(--accent-crimson)' }}
                       >
                         ×
                       </button>
                     </div>
                   ))}
                   {agentChats.length === 0 && (
-                    <p className="text-slate/50 text-sm text-center py-4">No conversations yet</p>
+                    <p className="text-sm text-center py-4" style={{ color: 'var(--text-muted)', opacity: 0.5 }}>No conversations yet</p>
                   )}
                 </div>
               </div>
@@ -696,7 +866,7 @@ Rules:
             {view === 'chat' && (
               <>
                 {/* Agent header */}
-                <div className="p-6 border-b border-slate/20">
+                <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <div className="flex items-center gap-4">
                     <span className="text-3xl" style={{
                       color: AGENTS[currentAgent].color === 'gold' ? '#c9a227' :
@@ -705,11 +875,11 @@ Rules:
                              '#8b5cf6'
                     }}>{AGENTS[currentAgent].icon}</span>
                     <div>
-                      <h2 className="font-display text-3xl text-parchment">{AGENTS[currentAgent].name}</h2>
-                      <p className="text-slate text-sm">{AGENTS[currentAgent].description}</p>
+                      <h2 className="font-display text-3xl" style={{ color: 'var(--text-primary)' }}>{AGENTS[currentAgent].name}</h2>
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{AGENTS[currentAgent].description}</p>
                     </div>
                     <div className="ml-auto flex items-center gap-3">
-                      <span className="text-xs text-slate bg-slate/10 px-2 py-1 rounded">
+                      <span className="text-xs px-2 py-1 rounded" style={{ color: 'var(--text-muted)', backgroundColor: 'var(--bg-tertiary)' }}>
                         {MODELS[selectedModel]?.name}
                       </span>
                       {AGENTS[currentAgent].id === 'critic' && (
@@ -733,10 +903,11 @@ Rules:
                 ) : (
                   <div className="flex-1 flex items-center justify-center">
                     <div className="text-center">
-                      <p className="text-slate mb-4">Select a conversation or start a new one</p>
+                      <p className="mb-4" style={{ color: 'var(--text-muted)' }}>Select a conversation or start a new one</p>
                       <button
                         onClick={() => createChat(currentAgent)}
-                        className="bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded transition-colors"
+                        className="font-body font-medium px-6 py-2 rounded transition-colors"
+                        style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                       >
                         New Conversation
                       </button>
@@ -766,6 +937,8 @@ Rules:
               <SettingsPanel
                 apiKeys={apiKeys}
                 onSaveKey={saveApiKey}
+                theme={theme}
+                onThemeChange={saveTheme}
               />
             )}
           </div>
@@ -776,7 +949,7 @@ Rules:
     // ============================================
     // WELCOME SCREEN
     // ============================================
-    function WelcomeScreen({ apiKeys, onSaveKey }) {
+    function WelcomeScreen({ apiKeys, onSaveKey, theme, onThemeChange }) {
       const [inputs, setInputs] = useState({ anthropic: '', openai: '', moonshot: '' });
       
       const handleSave = () => {
@@ -788,22 +961,25 @@ Rules:
       const hasAnyInput = Object.values(inputs).some(k => k.length > 10);
       
       return (
-        <div className="min-h-screen bg-ink flex items-center justify-center p-8">
+        <div className="min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: 'var(--bg-primary)' }}>
           <div className="max-w-lg w-full">
             <div className="text-center mb-12">
-              <div className="text-6xl text-gold mb-4">◈</div>
-              <h1 className="font-display text-5xl text-parchment mb-2">Syuzhet</h1>
-              <p className="font-body text-slate text-sm tracking-widest uppercase">Fiction Control Panel</p>
+              <div className="text-6xl mb-4" style={{ color: 'var(--accent-gold)' }}>◈</div>
+              <h1 className="font-display text-5xl mb-2" style={{ color: 'var(--text-primary)' }}>Syuzhet</h1>
+              <p className="font-body text-sm tracking-widest uppercase" style={{ color: 'var(--text-muted)' }}>Fiction Control Panel</p>
+              <div className="mt-6 flex justify-center">
+                <ThemeToggle currentTheme={theme} onThemeChange={onThemeChange} />
+              </div>
             </div>
             
-            <div className="bg-ink border border-slate/30 rounded-lg p-6 space-y-6">
-              <p className="text-parchment text-sm text-center mb-4">
+            <div className="rounded-lg p-6 space-y-6" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+              <p className="text-sm text-center mb-4" style={{ color: 'var(--text-primary)' }}>
                 Enter at least one API key to begin
               </p>
               
               {/* Anthropic */}
               <div>
-                <label className="flex items-center gap-2 font-body text-parchment text-sm mb-2">
+                <label className="flex items-center gap-2 font-body text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#c9a227' }}></span>
                   Anthropic API Key
                 </label>
@@ -812,13 +988,14 @@ Rules:
                   value={inputs.anthropic}
                   onChange={(e) => setInputs(prev => ({ ...prev, anthropic: e.target.value }))}
                   placeholder="sk-ant-..."
-                  className="w-full bg-ink border border-slate/50 rounded px-4 py-3 font-mono text-sm text-parchment placeholder-slate focus:border-gold focus:outline-none"
+                  className="w-full rounded px-4 py-3 font-mono text-sm focus:outline-none"
+                  style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
               </div>
               
               {/* OpenAI */}
               <div>
-                <label className="flex items-center gap-2 font-body text-parchment text-sm mb-2">
+                <label className="flex items-center gap-2 font-body text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10a37f' }}></span>
                   OpenAI API Key
                 </label>
@@ -827,13 +1004,14 @@ Rules:
                   value={inputs.openai}
                   onChange={(e) => setInputs(prev => ({ ...prev, openai: e.target.value }))}
                   placeholder="sk-..."
-                  className="w-full bg-ink border border-slate/50 rounded px-4 py-3 font-mono text-sm text-parchment placeholder-slate focus:border-gold focus:outline-none"
+                  className="w-full rounded px-4 py-3 font-mono text-sm focus:outline-none"
+                  style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
               </div>
               
               {/* Moonshot */}
               <div>
-                <label className="flex items-center gap-2 font-body text-parchment text-sm mb-2">
+                <label className="flex items-center gap-2 font-body text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#6366f1' }}></span>
                   Kimi (Moonshot) API Key
                 </label>
@@ -842,19 +1020,21 @@ Rules:
                   value={inputs.moonshot}
                   onChange={(e) => setInputs(prev => ({ ...prev, moonshot: e.target.value }))}
                   placeholder="sk-..."
-                  className="w-full bg-ink border border-slate/50 rounded px-4 py-3 font-mono text-sm text-parchment placeholder-slate focus:border-gold focus:outline-none"
+                  className="w-full rounded px-4 py-3 font-mono text-sm focus:outline-none"
+                  style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
               </div>
               
               <button
                 onClick={handleSave}
                 disabled={!hasAnyInput}
-                className="w-full bg-gold hover:bg-gold-dim disabled:bg-slate disabled:cursor-not-allowed text-ink font-body font-medium py-3 rounded transition-colors"
+                className="w-full font-body font-medium py-3 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
               >
                 Enter the Workshop
               </button>
               
-              <p className="text-slate text-xs text-center">
+              <p className="text-xs text-center" style={{ color: 'var(--text-muted)' }}>
                 Keys are stored locally in your browser and never sent anywhere except the respective APIs.
               </p>
             </div>
@@ -866,7 +1046,7 @@ Rules:
     // ============================================
     // SETTINGS PANEL
     // ============================================
-    function SettingsPanel({ apiKeys, onSaveKey }) {
+    function SettingsPanel({ apiKeys, onSaveKey, theme, onThemeChange }) {
       const [inputs, setInputs] = useState(apiKeys);
       const [saved, setSaved] = useState({});
       
@@ -893,22 +1073,45 @@ Rules:
       
       return (
         <div className="flex-1 p-8 overflow-y-auto">
-          <h2 className="font-display text-3xl text-parchment mb-2">Settings</h2>
-          <p className="text-slate text-sm mb-8">Manage API keys and preferences</p>
+          <h2 className="font-display text-3xl mb-2" style={{ color: 'var(--text-primary)' }}>Settings</h2>
+          <p className="text-sm mb-8" style={{ color: 'var(--text-muted)' }}>Manage API keys and preferences</p>
           
           <div className="max-w-2xl space-y-6">
-            <h3 className="font-body text-lg text-parchment border-b border-slate/20 pb-2">API Keys</h3>
+            {/* Theme Selection */}
+            <div>
+              <h3 className="font-body text-lg pb-2 mb-4" style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)' }}>Appearance</h3>
+              <div className="flex gap-3">
+                {Object.values(THEMES).map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => onThemeChange(t.id)}
+                    className="flex-1 p-4 rounded-lg transition-all"
+                    style={{
+                      backgroundColor: theme === t.id ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                      border: theme === t.id ? '2px solid var(--accent-gold)' : '2px solid var(--border-color)'
+                    }}
+                  >
+                    <div className="text-2xl mb-2">{t.icon}</div>
+                    <div className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{t.name}</div>
+                    <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t.description}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* API Keys */}
+            <h3 className="font-body text-lg pb-2" style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)' }}>API Keys</h3>
             
             {providers.map(provider => (
-              <div key={provider.id} className="bg-slate/5 border border-slate/20 rounded-lg p-4">
+              <div key={provider.id} className="rounded-lg p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }}></span>
-                  <span className="font-body text-parchment font-medium">{provider.name}</span>
+                  <span className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{provider.name}</span>
                   {apiKeys[provider.id] && (
                     <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Connected</span>
                   )}
                 </div>
-                <p className="text-slate text-xs mb-3">{provider.description}</p>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{provider.description}</p>
                 
                 <div className="flex gap-2">
                   <input
@@ -916,18 +1119,21 @@ Rules:
                     value={inputs[provider.id]}
                     onChange={(e) => setInputs(prev => ({ ...prev, [provider.id]: e.target.value }))}
                     placeholder={provider.placeholder}
-                    className="flex-1 bg-ink border border-slate/30 rounded px-3 py-2 font-mono text-sm text-parchment placeholder-slate focus:border-gold focus:outline-none"
+                    className="flex-1 rounded px-3 py-2 font-mono text-sm focus:outline-none"
+                    style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                   />
                   <button
                     onClick={() => handleSave(provider.id)}
-                    className="bg-gold hover:bg-gold-dim text-ink font-body text-sm px-4 py-2 rounded transition-colors"
+                    className="font-body text-sm px-4 py-2 rounded transition-colors"
+                    style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                   >
                     {saved[provider.id] ? '✓' : 'Save'}
                   </button>
                   {apiKeys[provider.id] && (
                     <button
                       onClick={() => handleClear(provider.id)}
-                      className="bg-slate/20 hover:bg-crimson/20 hover:text-crimson text-slate font-body text-sm px-4 py-2 rounded transition-colors"
+                      className="font-body text-sm px-4 py-2 rounded transition-colors"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
                     >
                       Clear
                     </button>
@@ -936,8 +1142,8 @@ Rules:
               </div>
             ))}
             
-            <div className="pt-6 border-t border-slate/20">
-              <h3 className="font-body text-lg text-parchment mb-4">Data Management</h3>
+            <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+              <h3 className="font-body text-lg mb-4" style={{ color: 'var(--text-primary)' }}>Data Management</h3>
               <div className="flex gap-4">
                 <button
                   onClick={() => {
@@ -954,7 +1160,8 @@ Rules:
                     a.download = 'syuzhet-export.json';
                     a.click();
                   }}
-                  className="bg-slate/20 hover:bg-slate/30 text-parchment font-body text-sm px-4 py-2 rounded transition-colors"
+                  className="font-body text-sm px-4 py-2 rounded transition-colors"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                 >
                   Export Project Data
                 </button>
@@ -968,7 +1175,8 @@ Rules:
                       window.location.reload();
                     }
                   }}
-                  className="bg-crimson/20 hover:bg-crimson/30 text-crimson font-body text-sm px-4 py-2 rounded transition-colors"
+                  className="font-body text-sm px-4 py-2 rounded transition-colors"
+                  style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}
                 >
                   Clear All Data
                 </button>
@@ -1000,10 +1208,10 @@ Rules:
       return (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-6 paper-texture">
             {chat.messages.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-slate">Start a conversation with the {agent.name}</p>
+                <p style={{ color: 'var(--text-muted)' }}>Start a conversation with the {agent.name}</p>
               </div>
             )}
             {chat.messages.map((msg, i) => (
@@ -1020,16 +1228,19 @@ Rules:
                                agent.color === 'rose' ? '#f43f5e' :
                                '#8b5cf6'
                       }}>{agent.icon}</span>
-                      <span className="text-slate text-sm">{agent.name}</span>
+                      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{agent.name}</span>
                     </div>
                   )}
-                  <div className={`rounded-lg px-4 py-3 ${
-                    msg.role === 'user'
-                      ? 'bg-slate/20 text-parchment inline-block'
-                      : msg.isError
-                        ? 'bg-crimson/20 text-crimson border border-crimson/30'
-                        : 'bg-parchment/5 text-parchment/90 border border-slate/10'
-                  }`}>
+                  <div 
+                    className="rounded-lg px-4 py-3 prose-editor"
+                    style={
+                      msg.role === 'user'
+                        ? { backgroundColor: 'var(--chat-user-bg)', color: 'var(--text-primary)', display: 'inline-block' }
+                        : msg.isError
+                          ? { backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)', border: '1px solid rgba(139, 41, 66, 0.3)' }
+                          : { backgroundColor: 'var(--chat-assistant-bg)', color: 'var(--text-primary)', border: '1px solid var(--chat-assistant-border)' }
+                    }
+                  >
                     <div className={`font-body text-sm whitespace-pre-wrap ${msg.role === 'assistant' ? 'font-mono text-xs' : ''}`}>
                       {msg.content}
                     </div>
@@ -1039,17 +1250,17 @@ Rules:
             ))}
             {isLoading && (
               <div className="flex items-center gap-2">
-                <span className="text-gold animate-pulse">{agent.icon}</span>
-                <span className="text-slate text-sm">Thinking...</span>
+                <span className="animate-pulse" style={{ color: 'var(--accent-gold)' }}>{agent.icon}</span>
+                <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Thinking...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
           
           {/* Input */}
-          <form onSubmit={handleSubmit} className="p-6 border-t border-slate/20">
+          <form onSubmit={handleSubmit} className="p-6" style={{ borderTop: '1px solid var(--border-color)' }}>
             {!hasValidKey && (
-              <p className="text-crimson text-sm mb-3">⚠ Please add an API key for the selected model in Settings</p>
+              <p className="text-sm mb-3" style={{ color: 'var(--accent-crimson)' }}>⚠ Please add an API key for the selected model in Settings</p>
             )}
             <div className="flex gap-4">
               <textarea
@@ -1064,12 +1275,14 @@ Rules:
                 placeholder={hasValidKey ? `Message the ${agent.name}...` : 'Add API key in Settings first'}
                 disabled={!hasValidKey}
                 rows={3}
-                className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-body text-sm text-parchment placeholder-slate focus:border-gold focus:outline-none resize-none disabled:opacity-50"
+                className="flex-1 rounded-lg px-4 py-3 font-body text-sm focus:outline-none resize-none disabled:opacity-50 prose-editor"
+                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading || !hasValidKey}
-                className="bg-gold hover:bg-gold-dim disabled:bg-slate disabled:cursor-not-allowed text-ink font-body font-medium px-6 rounded-lg transition-colors self-end"
+                className="font-body font-medium px-6 rounded-lg transition-colors self-end disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
               >
                 Send
               </button>
@@ -1092,22 +1305,26 @@ Rules:
       
       return (
         <div className="flex-1 flex flex-col">
-          <div className="p-6 border-b border-slate/20">
-            <h2 className="font-display text-3xl text-parchment mb-4">Story Bible & Tension Curve</h2>
+          <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
+            <h2 className="font-display text-3xl mb-4" style={{ color: 'var(--text-primary)' }}>Story Bible & Tension Curve</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setActiveTab('bible')}
-                className={`px-4 py-2 text-sm font-body rounded transition-colors ${
-                  activeTab === 'bible' ? 'bg-gold text-ink' : 'text-slate hover:text-parchment'
-                }`}
+                className="px-4 py-2 text-sm font-body rounded transition-colors"
+                style={activeTab === 'bible' 
+                  ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                  : { color: 'var(--text-muted)' }
+                }
               >
                 Story Bible
               </button>
               <button
                 onClick={() => setActiveTab('curve')}
-                className={`px-4 py-2 text-sm font-body rounded transition-colors ${
-                  activeTab === 'curve' ? 'bg-gold text-ink' : 'text-slate hover:text-parchment'
-                }`}
+                className="px-4 py-2 text-sm font-body rounded transition-colors"
+                style={activeTab === 'curve' 
+                  ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                  : { color: 'var(--text-muted)' }
+                }
               >
                 Tension Curve
               </button>
@@ -1117,7 +1334,7 @@ Rules:
           <div className="flex-1 p-6 overflow-hidden">
             {activeTab === 'bible' && (
               <div className="h-full flex flex-col">
-                <p className="text-slate text-sm mb-4">
+                <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
                   Define objective reality, disclosure schedule, and character knowledge. Use YAML format.
                   The Architect, Scribe, and Keeper can see this. The Critic cannot.
                 </p>
@@ -1125,11 +1342,13 @@ Rules:
                   value={bibleContent}
                   onChange={(e) => setBibleContent(e.target.value)}
                   placeholder={`# Story Bible\n\nobjective_reality:\n  - fact: "Marcus killed Elena"\n    when: "3 months before story"\n\ndisclosure_schedule:\n  - fact_id: killer_identity\n    hinted_at: [3, 7]\n    suspected_by_reader: 12\n    confirmed: 18\n\ncharacter_knowledge:\n  marcus:\n    knows: ["he killed Elena"]\n    believes_falsely: ["no witnesses"]`}
-                  className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-mono text-sm text-parchment placeholder-slate/50 focus:border-gold focus:outline-none resize-none"
+                  className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none page-container prose-editor"
+                  style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
                 <button
                   onClick={() => onSaveBible(bibleContent)}
-                  className="mt-4 bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                  className="mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                  style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                 >
                   Save Story Bible
                 </button>
@@ -1138,18 +1357,20 @@ Rules:
             
             {activeTab === 'curve' && (
               <div className="h-full flex flex-col">
-                <p className="text-slate text-sm mb-4">
+                <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
                   Define target tension levels (1-10) for each chapter. The Critic will evaluate drafts against these targets.
                 </p>
                 <textarea
                   value={curveContent}
                   onChange={(e) => setCurveContent(e.target.value)}
                   placeholder={`# Tension Curve\n\nchapters:\n  1:\n    target: 4\n    type: "hook, establish normal"\n  2:\n    target: 3\n    type: "deepen character"\n  3:\n    target: 5\n    type: "first complication"\n  4:\n    target: 6\n    type: "escalation"`}
-                  className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-mono text-sm text-parchment placeholder-slate/50 focus:border-gold focus:outline-none resize-none"
+                  className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none page-container prose-editor"
+                  style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
                 <button
                   onClick={() => onSaveCurve(curveContent)}
-                  className="mt-4 bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                  className="mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                  style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                 >
                   Save Tension Curve
                 </button>
@@ -1193,18 +1414,18 @@ Rules:
       return (
         <div className="flex-1 flex">
           {/* Chapter list */}
-          <div className="w-48 border-r border-slate/20 p-4">
-            <p className="text-slate text-xs uppercase tracking-wider mb-3">Chapters</p>
+          <div className="w-48 p-4" style={{ borderRight: '1px solid var(--border-color)' }}>
+            <p className="text-xs uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Chapters</p>
             <div className="space-y-1 mb-4">
               {chapterNums.map(num => (
                 <button
                   key={num}
                   onClick={() => setSelectedChapter(num)}
-                  className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                    selectedChapter === num
-                      ? 'bg-gold/20 text-gold'
-                      : 'text-slate hover:text-parchment hover:bg-slate/10'
-                  }`}
+                  className="w-full text-left px-3 py-2 rounded text-sm transition-colors"
+                  style={selectedChapter === num
+                    ? { backgroundColor: 'rgba(201,162,39,0.2)', color: 'var(--accent-gold)' }
+                    : { color: 'var(--text-muted)' }
+                  }
                 >
                   Chapter {num}
                 </button>
@@ -1216,11 +1437,13 @@ Rules:
                 value={newChapterNum}
                 onChange={(e) => setNewChapterNum(e.target.value)}
                 placeholder="#"
-                className="w-12 bg-ink border border-slate/30 rounded px-2 py-1 text-sm text-parchment"
+                className="w-12 rounded px-2 py-1 text-sm"
+                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
               />
               <button
                 onClick={createChapter}
-                className="flex-1 bg-slate/20 hover:bg-slate/30 text-parchment text-sm py-1 rounded transition-colors"
+                className="flex-1 text-sm py-1 rounded transition-colors"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
               >
                 Add
               </button>
@@ -1231,16 +1454,18 @@ Rules:
           <div className="flex-1 flex flex-col">
             {selectedChapter ? (
               <>
-                <div className="p-6 border-b border-slate/20">
-                  <h2 className="font-display text-2xl text-parchment mb-4">Chapter {selectedChapter}</h2>
+                <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <h2 className="font-display text-2xl mb-4" style={{ color: 'var(--text-primary)' }}>Chapter {selectedChapter}</h2>
                   <div className="flex gap-2">
                     {['beats', 'draft', 'feedback'].map(tab => (
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`px-4 py-2 text-sm font-body rounded capitalize transition-colors ${
-                          activeTab === tab ? 'bg-gold text-ink' : 'text-slate hover:text-parchment'
-                        }`}
+                        className="px-4 py-2 text-sm font-body rounded capitalize transition-colors"
+                        style={activeTab === tab 
+                          ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                          : { color: 'var(--text-muted)' }
+                        }
                       >
                         {tab}
                       </button>
@@ -1257,11 +1482,13 @@ Rules:
                       activeTab === 'draft' ? 'Chapter prose goes here...' :
                       '# Feedback from Critic\n\n{ "issues": [], "preserve": [] }'
                     }
-                    className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-mono text-sm text-parchment placeholder-slate/50 focus:border-gold focus:outline-none resize-none"
+                    className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none page-container prose-editor"
+                    style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                   />
                   <button
                     onClick={() => onSaveChapter(selectedChapter, { [activeTab]: editContent[activeTab] })}
-                    className="mt-4 bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                    className="mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                    style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                   >
                     Save {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
                   </button>
@@ -1269,7 +1496,7 @@ Rules:
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center">
-                <p className="text-slate">Select or create a chapter</p>
+                <p style={{ color: 'var(--text-muted)' }}>Select or create a chapter</p>
               </div>
             )}
           </div>
