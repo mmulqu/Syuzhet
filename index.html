@@ -233,6 +233,13 @@
         keyPrefix: 'sk-',
         color: '#10a37f'
       },
+      deepseek: {
+        id: 'deepseek',
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com/chat/completions',
+        keyPrefix: 'sk-',
+        color: '#4f8cff'
+      },
       moonshot: {
         id: 'moonshot',
         name: 'Kimi (Moonshot)',
@@ -252,6 +259,9 @@
       'o3-2025-04-16': { provider: 'openai', name: 'o3', tier: 'reasoning' },
       'gpt-4.1-2025-04-14': { provider: 'openai', name: 'GPT-4.1', tier: 'balanced' },
       'gpt-5-mini-2025-08-07': { provider: 'openai', name: 'GPT-5 Mini', tier: 'fast' },
+      // DeepSeek
+      'deepseek-chat': { provider: 'deepseek', name: 'DeepSeek V3.2', tier: 'balanced' },
+      'deepseek-reasoner': { provider: 'deepseek', name: 'DeepSeek Reasoner', tier: 'reasoning' },
       // Kimi/Moonshot
       'kimi-k2-turbo-preview': { provider: 'moonshot', name: 'Kimi K2 Turbo', tier: 'balanced' },
     };
@@ -541,6 +551,33 @@ Rules:
       return data.choices[0].message.content;
     }
 
+    async function callDeepSeek(apiKey, model, systemPrompt, messages) {
+      const apiMessages = [
+        { role: 'system', content: systemPrompt },
+        ...messages.map(m => ({ role: m.role, content: m.content }))
+      ];
+      
+      const response = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: apiMessages
+        })
+      });
+      
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `DeepSeek API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data.choices[0].message.content;
+    }
+
     // ============================================
     // MAIN APP
     // ============================================
@@ -549,6 +586,7 @@ Rules:
       const [apiKeys, setApiKeys] = useState({
         anthropic: '',
         openai: '',
+        deepseek: '',
         moonshot: ''
       });
       const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929');
@@ -724,6 +762,8 @@ Rules:
             assistantContent = await callAnthropic(currentApiKey, selectedModel, systemPrompt, updatedMessages);
           } else if (provider === 'openai') {
             assistantContent = await callOpenAI(currentApiKey, selectedModel, systemPrompt, updatedMessages);
+          } else if (provider === 'deepseek') {
+            assistantContent = await callDeepSeek(currentApiKey, selectedModel, systemPrompt, updatedMessages);
           } else if (provider === 'moonshot') {
             assistantContent = await callMoonshot(currentApiKey, selectedModel, systemPrompt, updatedMessages);
           }
@@ -865,6 +905,11 @@ Rules:
                 <optgroup label="OpenAI">
                   {Object.entries(MODELS).filter(([_, m]) => m.provider === 'openai').map(([id, m]) => (
                     <option key={id} value={id} disabled={!apiKeys.openai}>{m.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="DeepSeek">
+                  {Object.entries(MODELS).filter(([_, m]) => m.provider === 'deepseek').map(([id, m]) => (
+                    <option key={id} value={id} disabled={!apiKeys.deepseek}>{m.name}</option>
                   ))}
                 </optgroup>
                 <optgroup label="Kimi (Moonshot)">
@@ -1063,7 +1108,7 @@ Rules:
     // WELCOME SCREEN
     // ============================================
     function WelcomeScreen({ apiKeys, onSaveKey, theme, onThemeChange }) {
-      const [inputs, setInputs] = useState({ anthropic: '', openai: '', moonshot: '' });
+      const [inputs, setInputs] = useState({ anthropic: '', openai: '', deepseek: '', moonshot: '' });
       
       const handleSave = () => {
         Object.entries(inputs).forEach(([provider, key]) => {
@@ -1116,6 +1161,22 @@ Rules:
                   type="password"
                   value={inputs.openai}
                   onChange={(e) => setInputs(prev => ({ ...prev, openai: e.target.value }))}
+                  placeholder="sk-..."
+                  className="w-full rounded px-4 py-3 font-mono text-sm focus:outline-none"
+                  style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                />
+              </div>
+              
+              {/* DeepSeek */}
+              <div>
+                <label className="flex items-center gap-2 font-body text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#4f8cff' }}></span>
+                  DeepSeek API Key
+                </label>
+                <input
+                  type="password"
+                  value={inputs.deepseek}
+                  onChange={(e) => setInputs(prev => ({ ...prev, deepseek: e.target.value }))}
                   placeholder="sk-..."
                   className="w-full rounded px-4 py-3 font-mono text-sm focus:outline-none"
                   style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
@@ -1208,6 +1269,7 @@ Rules:
       const providers = [
         { id: 'anthropic', name: 'Anthropic', color: '#c9a227', placeholder: 'sk-ant-...', description: 'Claude models (Opus, Sonnet, Haiku)' },
         { id: 'openai', name: 'OpenAI', color: '#10a37f', placeholder: 'sk-...', description: 'GPT-5, o3, GPT-4.1, GPT-5 Mini' },
+        { id: 'deepseek', name: 'DeepSeek', color: '#4f8cff', placeholder: 'sk-...', description: 'DeepSeek V3.2, Reasoner' },
         { id: 'moonshot', name: 'Kimi (Moonshot)', color: '#6366f1', placeholder: 'sk-...', description: 'Kimi K2 Turbo' },
       ];
       
