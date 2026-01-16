@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Syuzhet — Fiction Control Panel</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            'display': ['Cormorant Garamond', 'serif'],
+            'body': ['Sora', 'sans-serif'],
+            'mono': ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            ink: '#1a1a1a',
+            parchment: '#f5f2eb',
+            'parchment-dark': '#e8e4d9',
+            gold: '#c9a227',
+            'gold-dim': '#9a7b1c',
+            crimson: '#8b2942',
+            slate: '#4a5568',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #1a1a1a;
+      min-height: 100vh;
+    }
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 3px; }
+    .prose-content { line-height: 1.8; }
+    .prose-content p { margin-bottom: 1em; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+    @keyframes pulse-gold {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(201, 162, 39, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(201, 162, 39, 0); }
+    }
+    .pulse-gold { animation: pulse-gold 2s infinite; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // ============================================
+    // AGENT DEFINITIONS
+    // ============================================
+    const AGENTS = {
+      architect: {
+        id: 'architect',
+        name: 'Architect',
+        subtitle: 'Designer of Information Economy',
+        color: 'gold',
+        icon: '◈',
+        description: 'Creates story bible, disclosure schedules, tension curves, and beat sheets.',
+        contextAccess: ['story_bible', 'tension_curve', 'chapters', 'beats'],
+        systemPrompt: `You are the Architect, designer of the information economy for fiction.
+
+Your role is to design and maintain:
+- The story bible (objective reality—every fact that's "true")
+- Disclosure schedule (when each fact: hinted → suspected → confirmed)
+- Tension curve (target intensity per chapter)
+- Character knowledge maps (who knows what, who's wrong about what)
+- Chapter beat sheets (events + what's withheld + target tension)
+
+Rules:
+1. Story bible is FROZEN once approved
+2. Every major fact needs a disclosure arc (hint → suspicion → confirm)
+3. At least one fact should be a true surprise (no hints)
+4. Tension curve must have valleys—constant high exhausts readers
+5. Beat sheets specify what's WITHHELD, not just what happens
+
+When given an outline or draft, extract facts and create the information architecture.
+Output in YAML format when creating structured documents.`
+      },
+      scribe: {
+        id: 'scribe',
+        name: 'Scribe',
+        subtitle: 'Weaver of Prose',
+        color: 'emerald',
+        icon: '✦',
+        description: 'Writes and revises prose based on beat sheets and feedback.',
+        contextAccess: ['story_bible', 'beats', 'feedback', 'chapters'],
+        systemPrompt: `You are the Scribe, weaver of prose from structured beats.
+
+You write prose from beats and revise based on feedback. You do not decide what happens or what's revealed—that's the Architect's job. You decide how it reads on the page.
+
+Rules:
+1. NEVER reveal anything marked WITHHELD in the beat sheet
+2. NEVER have characters explain motivations unless beat specifies reveal
+3. End scenes on questions, not answers (unless designated resolution beat)
+4. Show, don't tell—especially emotions and realizations
+5. When a character knows something the reader doesn't, write behavior AS IF they know it, but never state the knowledge
+6. When revising: apply feedback in priority order, preserve marked spans verbatim
+7. If feedback conflicts with a preserve span, keep the span—flag the conflict
+
+Write with atmospheric prose, sharp dialogue, and controlled pacing.`
+      },
+      critic: {
+        id: 'critic',
+        name: 'Critic',
+        subtitle: 'Reader\'s Advocate',
+        color: 'rose',
+        icon: '◇',
+        description: 'Evaluates drafts through reader simulation, tension, and craft lenses.',
+        contextAccess: ['chapters'], // NO story_bible - reads blind
+        systemPrompt: `You are the Critic, modeling the reader's experience.
+
+You evaluate drafts through three lenses:
+
+1. READER SIMULATION (what does the reader experience?)
+- What does the reader NOW believe to be true?
+- What does the reader SUSPECT but not know?
+- What questions is the reader actively holding?
+- Where is dramatic irony active?
+- Where was curiosity killed by over-explanation?
+
+IMPORTANT: You have NO access to the story bible. You only know what the text has shown.
+
+2. TENSION ASSESSMENT
+- Does this chapter hit its target tension?
+- Where are stakes deflated unnecessarily?
+- Where does pacing go flat?
+- Are there micro-tensions within quiet scenes?
+
+3. CRAFT CRITIQUE
+- Clichés and weak phrases
+- Telling instead of showing
+- Overwriting
+- Also: note STRENGTHS (these become preserve candidates)
+
+Output structured feedback as JSON with: reader_state, tension assessment, issues array, and preserve array.
+Every criticism must include a specific instruction. Note strengths too.`
+      },
+      keeper: {
+        id: 'keeper',
+        name: 'Keeper',
+        subtitle: 'Guardian of Secrets',
+        color: 'violet',
+        icon: '◆',
+        description: 'Verifies information discipline and revision integrity.',
+        contextAccess: ['story_bible', 'chapters', 'feedback', 'beats'],
+        systemPrompt: `You are the Keeper, guardian of what must stay hidden.
+
+You guard constraints and verify nothing broke. You are the final gate.
+
+You check two things:
+
+1. INFORMATION DISCIPLINE
+- Compare draft against disclosure schedule
+- Flag any fact revealed before its scheduled chapter
+- Flag "near misses" where careful readers might infer hidden facts
+
+2. REVISION INTEGRITY
+- Preserved spans appear VERBATIM in revision
+- No new information leakage introduced during editing
+- Constraints satisfied (word count, POV, banned phrases)
+- No continuity errors (timeline, character locations, established facts)
+- Tension score didn't regress from previous draft
+
+Output verification as JSON with: passed (boolean), information_discipline findings, revision_integrity findings, and action (what to do next).
+
+Rules:
+1. You do NOT suggest fixes—only pass/fail with reasons
+2. On failure, revision returns to Scribe with your flags
+3. Be paranoid: when in doubt, flag it
+4. "Near miss" = careful reader might infer; "Leakage" = fact is effectively confirmed
+5. Nothing ships without your clearance`
+      }
+    };
+
+    // ============================================
+    // STORAGE UTILITIES (using localStorage for GitHub Pages)
+    // ============================================
+    const Storage = {
+      get: (key) => {
+        try {
+          const item = localStorage.getItem(`syuzhet_${key}`);
+          return item ? JSON.parse(item) : null;
+        } catch { return null; }
+      },
+      set: (key, value) => {
+        try {
+          localStorage.setItem(`syuzhet_${key}`, JSON.stringify(value));
+          return true;
+        } catch { return false; }
+      },
+      delete: (key) => {
+        try {
+          localStorage.removeItem(`syuzhet_${key}`);
+          return true;
+        } catch { return false; }
+      },
+      keys: (prefix) => {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key.startsWith(`syuzhet_${prefix}`)) {
+            keys.push(key.replace('syuzhet_', ''));
+          }
+        }
+        return keys;
+      }
+    };
+
+    // ============================================
+    // MAIN APP
+    // ============================================
+    function App() {
+      const [apiKey, setApiKey] = useState('');
+      const [apiKeyInput, setApiKeyInput] = useState('');
+      const [currentAgent, setCurrentAgent] = useState('architect');
+      const [currentChatId, setCurrentChatId] = useState(null);
+      const [chats, setChats] = useState({});
+      const [storyBible, setStoryBible] = useState('');
+      const [tensionCurve, setTensionCurve] = useState('');
+      const [chapters, setChapters] = useState({});
+      const [view, setView] = useState('chat'); // chat, bible, chapters, viz
+      const [isLoading, setIsLoading] = useState(false);
+
+      // Load initial state
+      useEffect(() => {
+        const savedKey = Storage.get('api_key');
+        if (savedKey) setApiKey(savedKey);
+
+        const savedChats = Storage.get('chats') || {};
+        setChats(savedChats);
+
+        const savedBible = Storage.get('story_bible') || '';
+        setStoryBible(savedBible);
+
+        const savedCurve = Storage.get('tension_curve') || '';
+        setTensionCurve(savedCurve);
+
+        const savedChapters = Storage.get('chapters') || {};
+        setChapters(savedChapters);
+      }, []);
+
+      // Save API key
+      const saveApiKey = () => {
+        setApiKey(apiKeyInput);
+        Storage.set('api_key', apiKeyInput);
+      };
+
+      // Create new chat
+      const createChat = (agentId) => {
+        const chatId = `${agentId}_${Date.now()}`;
+        const newChat = {
+          id: chatId,
+          agentId,
+          title: 'New Conversation',
+          messages: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        const updated = { ...chats, [chatId]: newChat };
+        setChats(updated);
+        Storage.set('chats', updated);
+        setCurrentChatId(chatId);
+        setCurrentAgent(agentId);
+        return chatId;
+      };
+
+      // Get context for agent
+      const getAgentContext = (agentId) => {
+        const agent = AGENTS[agentId];
+        let context = '';
+
+        if (agent.contextAccess.includes('story_bible') && storyBible) {
+          context += `\n\n<story_bible>\n${storyBible}\n</story_bible>`;
+        }
+        if (agent.contextAccess.includes('tension_curve') && tensionCurve) {
+          context += `\n\n<tension_curve>\n${tensionCurve}\n</tension_curve>`;
+        }
+        if (agent.contextAccess.includes('chapters')) {
+          const chapterList = Object.entries(chapters)
+            .sort(([a], [b]) => parseInt(a) - parseInt(b))
+            .map(([num, ch]) => `<chapter number="${num}">\n${ch.draft || ''}\n</chapter>`)
+            .join('\n');
+          if (chapterList) {
+            context += `\n\n<chapters>\n${chapterList}\n</chapters>`;
+          }
+        }
+
+        return context;
+      };
+
+      // Send message
+      const sendMessage = async (content) => {
+        if (!apiKey || !currentChatId) return;
+
+        const chat = chats[currentChatId];
+        const agent = AGENTS[chat.agentId];
+
+        // Add user message
+        const userMessage = { role: 'user', content, timestamp: Date.now() };
+        const updatedMessages = [...chat.messages, userMessage];
+
+        // Update chat with user message
+        const updatedChat = {
+          ...chat,
+          messages: updatedMessages,
+          updatedAt: Date.now(),
+          title: chat.messages.length === 0 ? content.slice(0, 50) + '...' : chat.title
+        };
+        const updatedChats = { ...chats, [currentChatId]: updatedChat };
+        setChats(updatedChats);
+        Storage.set('chats', updatedChats);
+
+        setIsLoading(true);
+
+        try {
+          // Build context
+          const context = getAgentContext(chat.agentId);
+          const systemPrompt = agent.systemPrompt + (context ? `\n\nCurrent project context:${context}` : '');
+
+          // Convert messages to API format
+          const apiMessages = updatedMessages.map(m => ({
+            role: m.role,
+            content: m.content
+          }));
+
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true'
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 8192,
+              system: systemPrompt,
+              messages: apiMessages
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          const assistantContent = data.content[0].text;
+
+          // Add assistant message
+          const assistantMessage = { role: 'assistant', content: assistantContent, timestamp: Date.now() };
+          const finalMessages = [...updatedMessages, assistantMessage];
+
+          const finalChat = {
+            ...updatedChat,
+            messages: finalMessages,
+            updatedAt: Date.now()
+          };
+          const finalChats = { ...chats, [currentChatId]: finalChat };
+          setChats(finalChats);
+          Storage.set('chats', finalChats);
+
+        } catch (error) {
+          console.error('API Error:', error);
+          // Add error message
+          const errorMessage = { role: 'assistant', content: `Error: ${error.message}`, timestamp: Date.now(), isError: true };
+          const errorMessages = [...updatedMessages, errorMessage];
+          const errorChat = { ...updatedChat, messages: errorMessages };
+          setChats({ ...chats, [currentChatId]: errorChat });
+        }
+
+        setIsLoading(false);
+      };
+
+      // Delete chat
+      const deleteChat = (chatId) => {
+        const { [chatId]: removed, ...rest } = chats;
+        setChats(rest);
+        Storage.set('chats', rest);
+        if (currentChatId === chatId) {
+          setCurrentChatId(null);
+        }
+      };
+
+      // Save story bible
+      const saveStoryBible = (content) => {
+        setStoryBible(content);
+        Storage.set('story_bible', content);
+      };
+
+      // Save tension curve
+      const saveTensionCurve = (content) => {
+        setTensionCurve(content);
+        Storage.set('tension_curve', content);
+      };
+
+      // Save chapter
+      const saveChapter = (num, data) => {
+        const updated = { ...chapters, [num]: { ...chapters[num], ...data } };
+        setChapters(updated);
+        Storage.set('chapters', updated);
+      };
+
+      // API Key screen
+      if (!apiKey) {
+        return (
+          <div className="min-h-screen bg-ink flex items-center justify-center p-8">
+            <div className="max-w-md w-full">
+              <div className="text-center mb-12">
+                <div className="text-6xl text-gold mb-4">◈</div>
+                <h1 className="font-display text-5xl text-parchment mb-2">Syuzhet</h1>
+                <p className="font-body text-slate text-sm tracking-widest uppercase">Fiction Control Panel</p>
+              </div>
+
+              <div className="bg-ink border border-slate/30 rounded-lg p-6">
+                <label className="block font-body text-parchment text-sm mb-2">Anthropic API Key</label>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="sk-ant-..."
+                  className="w-full bg-ink border border-slate/50 rounded px-4 py-3 font-mono text-sm text-parchment placeholder-slate focus:border-gold focus:outline-none"
+                />
+                <button
+                  onClick={saveApiKey}
+                  disabled={!apiKeyInput}
+                  className="w-full mt-4 bg-gold hover:bg-gold-dim disabled:bg-slate disabled:cursor-not-allowed text-ink font-body font-medium py-3 rounded transition-colors"
+                >
+                  Enter the Workshop
+                </button>
+                <p className="text-slate text-xs mt-4 text-center">
+                  Your key is stored locally and never sent anywhere except Anthropic's API.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const agentChats = Object.values(chats).filter(c => c.agentId === currentAgent).sort((a, b) => b.updatedAt - a.updatedAt);
+      const currentChat = currentChatId ? chats[currentChatId] : null;
+
+      return (
+        <div className="min-h-screen bg-ink flex">
+          {/* Sidebar */}
+          <div className="w-64 bg-ink border-r border-slate/20 flex flex-col">
+            {/* Logo */}
+            <div className="p-6 border-b border-slate/20">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl text-gold">◈</span>
+                <div>
+                  <h1 className="font-display text-2xl text-parchment">Syuzhet</h1>
+                  <p className="text-slate text-xs tracking-wider">CONTROL PANEL</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <div className="p-4 border-b border-slate/20">
+              <div className="flex gap-1">
+                {[
+                  { id: 'chat', label: 'Chat', icon: '◇' },
+                  { id: 'bible', label: 'Bible', icon: '◈' },
+                  { id: 'chapters', label: 'Chapters', icon: '▤' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setView(tab.id)}
+                    className={`flex-1 py-2 text-xs font-body rounded transition-colors ${
+                      view === tab.id
+                        ? 'bg-gold/20 text-gold'
+                        : 'text-slate hover:text-parchment'
+                    }`}
+                  >
+                    <span className="mr-1">{tab.icon}</span>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Agent selector */}
+            <div className="p-4 border-b border-slate/20">
+              <p className="text-slate text-xs uppercase tracking-wider mb-3">Agents</p>
+              <div className="space-y-1">
+                {Object.values(AGENTS).map(agent => (
+                  <button
+                    key={agent.id}
+                    onClick={() => { setCurrentAgent(agent.id); setView('chat'); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left transition-all ${
+                      currentAgent === agent.id
+                        ? `bg-${agent.color}-500/20 text-${agent.color}-400 border border-${agent.color}-500/30`
+                        : 'text-slate hover:text-parchment hover:bg-slate/10'
+                    }`}
+                    style={currentAgent === agent.id ? {
+                      backgroundColor: agent.color === 'gold' ? 'rgba(201,162,39,0.2)' :
+                                       agent.color === 'emerald' ? 'rgba(16,185,129,0.2)' :
+                                       agent.color === 'rose' ? 'rgba(244,63,94,0.2)' :
+                                       'rgba(139,92,246,0.2)',
+                      color: agent.color === 'gold' ? '#c9a227' :
+                             agent.color === 'emerald' ? '#10b981' :
+                             agent.color === 'rose' ? '#f43f5e' :
+                             '#8b5cf6'
+                    } : {}}
+                  >
+                    <span className="text-lg">{agent.icon}</span>
+                    <div>
+                      <div className="font-body text-sm font-medium">{agent.name}</div>
+                      <div className="text-xs opacity-60">{agent.subtitle}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat list */}
+            {view === 'chat' && (
+              <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-slate text-xs uppercase tracking-wider">Conversations</p>
+                  <button
+                    onClick={() => createChat(currentAgent)}
+                    className="text-gold hover:text-gold-dim text-lg"
+                    title="New conversation"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {agentChats.map(chat => (
+                    <div
+                      key={chat.id}
+                      className={`group flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-colors ${
+                        currentChatId === chat.id
+                          ? 'bg-slate/20 text-parchment'
+                          : 'text-slate hover:text-parchment hover:bg-slate/10'
+                      }`}
+                      onClick={() => setCurrentChatId(chat.id)}
+                    >
+                      <span className="flex-1 text-sm truncate">{chat.title}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteChat(chat.id); }}
+                        className="opacity-0 group-hover:opacity-100 text-slate hover:text-crimson text-xs"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {agentChats.length === 0 && (
+                    <p className="text-slate/50 text-sm text-center py-4">No conversations yet</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Settings */}
+            <div className="p-4 border-t border-slate/20">
+              <button
+                onClick={() => { setApiKey(''); Storage.delete('api_key'); }}
+                className="text-slate hover:text-crimson text-xs"
+              >
+                Disconnect API
+              </button>
+            </div>
+          </div>
+
+          {/* Main content */}
+          <div className="flex-1 flex flex-col">
+            {view === 'chat' && (
+              <>
+                {/* Agent header */}
+                <div className="p-6 border-b border-slate/20">
+                  <div className="flex items-center gap-4">
+                    <span className="text-3xl" style={{
+                      color: AGENTS[currentAgent].color === 'gold' ? '#c9a227' :
+                             AGENTS[currentAgent].color === 'emerald' ? '#10b981' :
+                             AGENTS[currentAgent].color === 'rose' ? '#f43f5e' :
+                             '#8b5cf6'
+                    }}>{AGENTS[currentAgent].icon}</span>
+                    <div>
+                      <h2 className="font-display text-3xl text-parchment">{AGENTS[currentAgent].name}</h2>
+                      <p className="text-slate text-sm">{AGENTS[currentAgent].description}</p>
+                    </div>
+                    {AGENTS[currentAgent].id !== 'critic' && (
+                      <div className="ml-auto">
+                        <span className="text-xs text-slate bg-slate/10 px-2 py-1 rounded">
+                          Has context access
+                        </span>
+                      </div>
+                    )}
+                    {AGENTS[currentAgent].id === 'critic' && (
+                      <div className="ml-auto">
+                        <span className="text-xs text-rose-400 bg-rose-500/10 px-2 py-1 rounded">
+                          Reads blind (no story bible)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Chat area */}
+                {currentChat ? (
+                  <ChatArea
+                    chat={currentChat}
+                    onSend={sendMessage}
+                    isLoading={isLoading}
+                    agent={AGENTS[currentAgent]}
+                  />
+                ) : (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-slate mb-4">Select a conversation or start a new one</p>
+                      <button
+                        onClick={() => createChat(currentAgent)}
+                        className="bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded transition-colors"
+                      >
+                        New Conversation
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {view === 'bible' && (
+              <StoryBibleEditor
+                storyBible={storyBible}
+                tensionCurve={tensionCurve}
+                onSaveBible={saveStoryBible}
+                onSaveCurve={saveTensionCurve}
+              />
+            )}
+
+            {view === 'chapters' && (
+              <ChapterManager
+                chapters={chapters}
+                onSaveChapter={saveChapter}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // CHAT AREA COMPONENT
+    // ============================================
+    function ChatArea({ chat, onSend, isLoading, agent }) {
+      const [input, setInput] = useState('');
+      const messagesEndRef = useRef(null);
+
+      useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [chat.messages]);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!input.trim() || isLoading) return;
+        onSend(input);
+        setInput('');
+      };
+
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-6 space-y-6">
+            {chat.messages.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-slate">Start a conversation with the {agent.name}</p>
+              </div>
+            )}
+            {chat.messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`animate-fadeIn ${msg.role === 'user' ? 'flex justify-end' : ''}`}
+              >
+                <div className={`max-w-3xl ${msg.role === 'user' ? 'text-right' : ''}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span style={{
+                        color: agent.color === 'gold' ? '#c9a227' :
+                               agent.color === 'emerald' ? '#10b981' :
+                               agent.color === 'rose' ? '#f43f5e' :
+                               '#8b5cf6'
+                      }}>{agent.icon}</span>
+                      <span className="text-slate text-sm">{agent.name}</span>
+                    </div>
+                  )}
+                  <div className={`rounded-lg px-4 py-3 ${
+                    msg.role === 'user'
+                      ? 'bg-slate/20 text-parchment inline-block'
+                      : msg.isError
+                        ? 'bg-crimson/20 text-crimson border border-crimson/30'
+                        : 'bg-parchment/5 text-parchment/90 border border-slate/10'
+                  }`}>
+                    <div className={`font-body text-sm whitespace-pre-wrap ${msg.role === 'assistant' ? 'font-mono text-xs' : ''}`}>
+                      {msg.content}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex items-center gap-2">
+                <span className="text-gold animate-pulse">{agent.icon}</span>
+                <span className="text-slate text-sm">Thinking...</span>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <form onSubmit={handleSubmit} className="p-6 border-t border-slate/20">
+            <div className="flex gap-4">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e);
+                  }
+                }}
+                placeholder={`Message the ${agent.name}...`}
+                rows={3}
+                className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-body text-sm text-parchment placeholder-slate focus:border-gold focus:outline-none resize-none"
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="bg-gold hover:bg-gold-dim disabled:bg-slate disabled:cursor-not-allowed text-ink font-body font-medium px-6 rounded-lg transition-colors self-end"
+              >
+                Send
+              </button>
+            </div>
+          </form>
+        </div>
+      );
+    }
+
+    // ============================================
+    // STORY BIBLE EDITOR
+    // ============================================
+    function StoryBibleEditor({ storyBible, tensionCurve, onSaveBible, onSaveCurve }) {
+      const [bibleContent, setBibleContent] = useState(storyBible);
+      const [curveContent, setCurveContent] = useState(tensionCurve);
+      const [activeTab, setActiveTab] = useState('bible');
+
+      useEffect(() => { setBibleContent(storyBible); }, [storyBible]);
+      useEffect(() => { setCurveContent(tensionCurve); }, [tensionCurve]);
+
+      return (
+        <div className="flex-1 flex flex-col">
+          <div className="p-6 border-b border-slate/20">
+            <h2 className="font-display text-3xl text-parchment mb-4">Story Bible & Tension Curve</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab('bible')}
+                className={`px-4 py-2 text-sm font-body rounded transition-colors ${
+                  activeTab === 'bible' ? 'bg-gold text-ink' : 'text-slate hover:text-parchment'
+                }`}
+              >
+                Story Bible
+              </button>
+              <button
+                onClick={() => setActiveTab('curve')}
+                className={`px-4 py-2 text-sm font-body rounded transition-colors ${
+                  activeTab === 'curve' ? 'bg-gold text-ink' : 'text-slate hover:text-parchment'
+                }`}
+              >
+                Tension Curve
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 p-6 overflow-hidden">
+            {activeTab === 'bible' && (
+              <div className="h-full flex flex-col">
+                <p className="text-slate text-sm mb-4">
+                  Define objective reality, disclosure schedule, and character knowledge. Use YAML format.
+                  The Architect, Scribe, and Keeper can see this. The Critic cannot.
+                </p>
+                <textarea
+                  value={bibleContent}
+                  onChange={(e) => setBibleContent(e.target.value)}
+                  placeholder={`# Story Bible\n\nobjective_reality:\n  - fact: "Marcus killed Elena"\n    when: "3 months before story"\n\ndisclosure_schedule:\n  - fact_id: killer_identity\n    hinted_at: [3, 7]\n    suspected_by_reader: 12\n    confirmed: 18\n\ncharacter_knowledge:\n  marcus:\n    knows: ["he killed Elena"]\n    believes_falsely: ["no witnesses"]`}
+                  className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-mono text-sm text-parchment placeholder-slate/50 focus:border-gold focus:outline-none resize-none"
+                />
+                <button
+                  onClick={() => onSaveBible(bibleContent)}
+                  className="mt-4 bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                >
+                  Save Story Bible
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'curve' && (
+              <div className="h-full flex flex-col">
+                <p className="text-slate text-sm mb-4">
+                  Define target tension levels (1-10) for each chapter. The Critic will evaluate drafts against these targets.
+                </p>
+                <textarea
+                  value={curveContent}
+                  onChange={(e) => setCurveContent(e.target.value)}
+                  placeholder={`# Tension Curve\n\nchapters:\n  1:\n    target: 4\n    type: "hook, establish normal"\n  2:\n    target: 3\n    type: "deepen character"\n  3:\n    target: 5\n    type: "first complication"\n  4:\n    target: 6\n    type: "escalation"`}
+                  className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-mono text-sm text-parchment placeholder-slate/50 focus:border-gold focus:outline-none resize-none"
+                />
+                <button
+                  onClick={() => onSaveCurve(curveContent)}
+                  className="mt-4 bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                >
+                  Save Tension Curve
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // CHAPTER MANAGER
+    // ============================================
+    function ChapterManager({ chapters, onSaveChapter }) {
+      const [selectedChapter, setSelectedChapter] = useState(null);
+      const [newChapterNum, setNewChapterNum] = useState('');
+      const [editContent, setEditContent] = useState({ beats: '', draft: '', feedback: '' });
+      const [activeTab, setActiveTab] = useState('beats');
+
+      const chapterNums = Object.keys(chapters).sort((a, b) => parseInt(a) - parseInt(b));
+
+      useEffect(() => {
+        if (selectedChapter && chapters[selectedChapter]) {
+          setEditContent({
+            beats: chapters[selectedChapter].beats || '',
+            draft: chapters[selectedChapter].draft || '',
+            feedback: chapters[selectedChapter].feedback || ''
+          });
+        }
+      }, [selectedChapter, chapters]);
+
+      const createChapter = () => {
+        const num = parseInt(newChapterNum);
+        if (num > 0) {
+          onSaveChapter(num, { beats: '', draft: '', feedback: '' });
+          setSelectedChapter(num.toString());
+          setNewChapterNum('');
+        }
+      };
+
+      return (
+        <div className="flex-1 flex">
+          {/* Chapter list */}
+          <div className="w-48 border-r border-slate/20 p-4">
+            <p className="text-slate text-xs uppercase tracking-wider mb-3">Chapters</p>
+            <div className="space-y-1 mb-4">
+              {chapterNums.map(num => (
+                <button
+                  key={num}
+                  onClick={() => setSelectedChapter(num)}
+                  className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                    selectedChapter === num
+                      ? 'bg-gold/20 text-gold'
+                      : 'text-slate hover:text-parchment hover:bg-slate/10'
+                  }`}
+                >
+                  Chapter {num}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={newChapterNum}
+                onChange={(e) => setNewChapterNum(e.target.value)}
+                placeholder="#"
+                className="w-12 bg-ink border border-slate/30 rounded px-2 py-1 text-sm text-parchment"
+              />
+              <button
+                onClick={createChapter}
+                className="flex-1 bg-slate/20 hover:bg-slate/30 text-parchment text-sm py-1 rounded transition-colors"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          {/* Chapter content */}
+          <div className="flex-1 flex flex-col">
+            {selectedChapter ? (
+              <>
+                <div className="p-6 border-b border-slate/20">
+                  <h2 className="font-display text-2xl text-parchment mb-4">Chapter {selectedChapter}</h2>
+                  <div className="flex gap-2">
+                    {['beats', 'draft', 'feedback', 'viz'].map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`px-4 py-2 text-sm font-body rounded capitalize transition-colors ${
+                          activeTab === tab ? 'bg-gold text-ink' : 'text-slate hover:text-parchment'
+                        }`}
+                      >
+                        {tab === 'viz' ? 'Tension' : tab}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex-1 p-6 overflow-hidden flex flex-col">
+                  {activeTab === 'viz' ? (
+                    <TensionViz chapterNum={selectedChapter} chapters={chapters} />
+                  ) : (
+                    <textarea
+                      value={editContent[activeTab]}
+                      onChange={(e) => setEditContent({ ...editContent, [activeTab]: e.target.value })}
+                      placeholder={
+                        activeTab === 'beats' ? '# Beat Sheet\n\nbeats:\n  - beat: 1\n    description: "..."\n    withheld: ["..."]\n    reader_learns: ["..."]' :
+                        activeTab === 'draft' ? 'Chapter prose goes here...' :
+                        '# Feedback from Critic\n\n{ "issues": [], "preserve": [] }'
+                      }
+                      className="flex-1 bg-ink border border-slate/30 rounded-lg px-4 py-3 font-mono text-sm text-parchment placeholder-slate/50 focus:border-gold focus:outline-none resize-none"
+                    />
+                  )}
+                  {activeTab !== 'viz' && (
+                    <button
+                      onClick={() => onSaveChapter(selectedChapter, { [activeTab]: editContent[activeTab] })}
+                      className="mt-4 bg-gold hover:bg-gold-dim text-ink font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                    >
+                      Save {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-slate">Select or create a chapter</p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // TENSION VISUALIZATION
+    // ============================================
+    function TensionViz({ chapterNum, chapters }) {
+      const chapterNums = Object.keys(chapters).sort((a, b) => parseInt(a) - parseInt(b));
+
+      // Parse tension from feedback if available
+      const getTension = (num) => {
+        const ch = chapters[num];
+        if (!ch || !ch.feedback) return null;
+        try {
+          const parsed = JSON.parse(ch.feedback);
+          return parsed.tension?.actual || parsed.actual_tension || null;
+        } catch {
+          // Try to find "tension": X or "actual": X in the text
+          const match = ch.feedback.match(/(?:tension|actual)["\s:]+(\d+)/i);
+          return match ? parseInt(match[1]) : null;
+        }
+      };
+
+      const maxTension = 10;
+      const barWidth = 40;
+      const barGap = 8;
+      const chartHeight = 200;
+      const chartWidth = Math.max(400, chapterNums.length * (barWidth + barGap) + 60);
+
+      return (
+        <div className="h-full flex flex-col">
+          <p className="text-slate text-sm mb-4">
+            Tension scores from Critic feedback. Bars show actual tension (gold = current chapter).
+          </p>
+
+          <div className="flex-1 overflow-x-auto">
+            <svg width={chartWidth} height={chartHeight + 40} className="font-mono">
+              {/* Y-axis labels */}
+              {[0, 2, 4, 6, 8, 10].map(val => (
+                <g key={val}>
+                  <text
+                    x="25"
+                    y={chartHeight - (val / maxTension) * chartHeight + 5}
+                    fill="#4a5568"
+                    fontSize="10"
+                    textAnchor="end"
+                  >
+                    {val}
+                  </text>
+                  <line
+                    x1="30"
+                    y1={chartHeight - (val / maxTension) * chartHeight}
+                    x2={chartWidth - 10}
+                    y2={chartHeight - (val / maxTension) * chartHeight}
+                    stroke="#4a5568"
+                    strokeOpacity="0.2"
+                  />
+                </g>
+              ))}
+
+              {/* Bars */}
+              {chapterNums.map((num, i) => {
+                const tension = getTension(num);
+                const barHeight = tension ? (tension / maxTension) * chartHeight : 0;
+                const x = 40 + i * (barWidth + barGap);
+                const isCurrent = num === chapterNum;
+
+                return (
+                  <g key={num}>
+                    {/* Bar background */}
+                    <rect
+                      x={x}
+                      y={0}
+                      width={barWidth}
+                      height={chartHeight}
+                      fill="#4a5568"
+                      fillOpacity="0.1"
+                      rx="2"
+                    />
+
+                    {/* Actual bar */}
+                    {tension && (
+                      <rect
+                        x={x}
+                        y={chartHeight - barHeight}
+                        width={barWidth}
+                        height={barHeight}
+                        fill={isCurrent ? '#c9a227' : '#4a5568'}
+                        rx="2"
+                      />
+                    )}
+
+                    {/* Value label */}
+                    {tension && (
+                      <text
+                        x={x + barWidth / 2}
+                        y={chartHeight - barHeight - 5}
+                        fill={isCurrent ? '#c9a227' : '#f5f2eb'}
+                        fontSize="11"
+                        textAnchor="middle"
+                      >
+                        {tension}
+                      </text>
+                    )}
+
+                    {/* Chapter label */}
+                    <text
+                      x={x + barWidth / 2}
+                      y={chartHeight + 20}
+                      fill={isCurrent ? '#c9a227' : '#4a5568'}
+                      fontSize="10"
+                      textAnchor="middle"
+                    >
+                      Ch{num}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          <div className="mt-4 p-4 bg-slate/10 rounded-lg">
+            <p className="text-parchment text-sm font-medium mb-2">Tension Scale Guide</p>
+            <div className="grid grid-cols-3 gap-2 text-xs text-slate">
+              <div><span className="text-parchment">1-3:</span> Low (setup, breathing room)</div>
+              <div><span className="text-parchment">4-6:</span> Medium (complications)</div>
+              <div><span className="text-parchment">7-8:</span> High (revelations)</div>
+              <div><span className="text-parchment">9-10:</span> Peak (climax)</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // RENDER
+    // ============================================
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
