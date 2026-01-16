@@ -780,6 +780,13 @@ Rules:
         setChapters(updated);
         Storage.set('chapters', updated);
       };
+      
+      const deleteChapter = (num) => {
+        const updated = { ...chapters };
+        delete updated[num];
+        setChapters(updated);
+        Storage.set('chapters', updated);
+      };
 
       // Check if any API key is set
       const hasAnyKey = Object.values(apiKeys).some(k => k.length > 10);
@@ -1026,6 +1033,7 @@ Rules:
               <ChapterManager
                 chapters={chapters}
                 onSaveChapter={saveChapter}
+                onDeleteChapter={deleteChapter}
               />
             )}
             
@@ -1744,7 +1752,7 @@ Rules:
     // ============================================
     // CHAPTER MANAGER
     // ============================================
-    function ChapterManager({ chapters, onSaveChapter }) {
+    function ChapterManager({ chapters, onSaveChapter, onDeleteChapter }) {
       const [selectedChapter, setSelectedChapter] = useState(null);
       const [newChapterNum, setNewChapterNum] = useState('');
       const [editContent, setEditContent] = useState({ beats: '', draft: '', feedback: '' });
@@ -1816,7 +1824,21 @@ Rules:
             {selectedChapter ? (
               <>
                 <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <h2 className="font-display text-2xl mb-4" style={{ color: 'var(--text-primary)' }}>Chapter {selectedChapter}</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="font-display text-2xl" style={{ color: 'var(--text-primary)' }}>Chapter {selectedChapter}</h2>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete Chapter ${selectedChapter}? This cannot be undone.`)) {
+                          onDeleteChapter(selectedChapter);
+                          setSelectedChapter(null);
+                        }
+                      }}
+                      className="text-sm px-3 py-1.5 rounded transition-colors"
+                      style={{ backgroundColor: 'rgba(139, 41, 66, 0.15)', color: 'var(--accent-crimson)' }}
+                    >
+                      Delete Chapter
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     {['beats', 'draft', 'feedback'].map(tab => (
                       <button
