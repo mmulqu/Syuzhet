@@ -154,7 +154,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
     // ============================================
     // PROVIDERS AND MODELS
@@ -504,6 +504,7 @@ Rules:
       const [storyBible, setStoryBible] = useState('');
       const [tensionCurve, setTensionCurve] = useState('');
       const [chapters, setChapters] = useState({});
+      const [customPrompts, setCustomPrompts] = useState({});
       const [view, setView] = useState('chat'); // chat, bible, chapters, settings
       const [isLoading, setIsLoading] = useState(false);
 
@@ -540,6 +541,9 @@ Rules:
         
         const savedChapters = Storage.get('chapters') || {};
         setChapters(savedChapters);
+        
+        const savedPrompts = Storage.get('custom_prompts') || {};
+        setCustomPrompts(savedPrompts);
       }, []);
 
       // Get current provider
@@ -558,6 +562,26 @@ Rules:
       const saveSelectedModel = (model) => {
         setSelectedModel(model);
         Storage.set('selected_model', model);
+      };
+
+      // Save custom prompt for an agent
+      const saveCustomPrompt = (agentId, prompt) => {
+        const updated = { ...customPrompts, [agentId]: prompt };
+        setCustomPrompts(updated);
+        Storage.set('custom_prompts', updated);
+      };
+      
+      // Reset prompt to default
+      const resetPrompt = (agentId) => {
+        const updated = { ...customPrompts };
+        delete updated[agentId];
+        setCustomPrompts(updated);
+        Storage.set('custom_prompts', updated);
+      };
+      
+      // Get effective prompt (custom or default)
+      const getEffectivePrompt = (agentId) => {
+        return customPrompts[agentId] || AGENTS[agentId].systemPrompt;
       };
 
       // Create new chat
@@ -630,7 +654,8 @@ Rules:
         try {
           // Build context
           const context = getAgentContext(chat.agentId);
-          const systemPrompt = agent.systemPrompt + (context ? `\n\nCurrent project context:${context}` : '');
+          const basePrompt = getEffectivePrompt(chat.agentId);
+          const systemPrompt = basePrompt + (context ? `\n\nCurrent project context:${context}` : '');
           
           // Call appropriate API
           let assistantContent;
@@ -728,12 +753,13 @@ Rules:
             
             {/* Navigation */}
             <div className="p-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap">
                 {[
                   { id: 'chat', label: 'Chat', icon: '◇' },
                   { id: 'bible', label: 'Bible', icon: '◈' },
                   { id: 'viz', label: 'Viz', icon: '📈' },
                   { id: 'chapters', label: 'Chapters', icon: '▤' },
+                  { id: 'stats', label: 'Stats', icon: '✎' },
                   { id: 'settings', label: 'Settings', icon: '⚙' },
                 ].map(tab => (
                   <button
@@ -944,12 +970,21 @@ Rules:
               />
             )}
             
+            {view === 'stats' && (
+              <WordCountPanel
+                chapters={chapters}
+              />
+            )}
+            
             {view === 'settings' && (
               <SettingsPanel
                 apiKeys={apiKeys}
                 onSaveKey={saveApiKey}
                 theme={theme}
                 onThemeChange={saveTheme}
+                customPrompts={customPrompts}
+                onSavePrompt={saveCustomPrompt}
+                onResetPrompt={resetPrompt}
               />
             )}
           </div>
@@ -1057,13 +1092,24 @@ Rules:
     // ============================================
     // SETTINGS PANEL
     // ============================================
-    function SettingsPanel({ apiKeys, onSaveKey, theme, onThemeChange }) {
+    function SettingsPanel({ apiKeys, onSaveKey, theme, onThemeChange, customPrompts, onSavePrompt, onResetPrompt }) {
       const [inputs, setInputs] = useState(apiKeys);
       const [saved, setSaved] = useState({});
+      const [activeSection, setActiveSection] = useState('general'); // general, agents
+      const [selectedAgent, setSelectedAgent] = useState('architect');
+      const [promptDraft, setPromptDraft] = useState('');
+      const [promptSaved, setPromptSaved] = useState(false);
       
       useEffect(() => {
         setInputs(apiKeys);
       }, [apiKeys]);
+      
+      // Load prompt when agent changes
+      useEffect(() => {
+        const currentPrompt = customPrompts[selectedAgent] || AGENTS[selectedAgent].systemPrompt;
+        setPromptDraft(currentPrompt);
+        setPromptSaved(false);
+      }, [selectedAgent, customPrompts]);
       
       const handleSave = (provider) => {
         onSaveKey(provider, inputs[provider]);
@@ -1076,123 +1122,353 @@ Rules:
         setInputs(prev => ({ ...prev, [provider]: '' }));
       };
       
+      const handleSavePrompt = () => {
+        onSavePrompt(selectedAgent, promptDraft);
+        setPromptSaved(true);
+        setTimeout(() => setPromptSaved(false), 2000);
+      };
+      
+      const handleResetPrompt = () => {
+        if (confirm('Reset this agent\'s prompt to the default? Your customizations will be lost.')) {
+          onResetPrompt(selectedAgent);
+          setPromptDraft(AGENTS[selectedAgent].systemPrompt);
+        }
+      };
+      
+      const isPromptModified = customPrompts[selectedAgent] !== undefined;
+      const hasUnsavedChanges = promptDraft !== (customPrompts[selectedAgent] || AGENTS[selectedAgent].systemPrompt);
+      
       const providers = [
         { id: 'anthropic', name: 'Anthropic', color: '#c9a227', placeholder: 'sk-ant-...', description: 'Claude models (Opus, Sonnet, Haiku)' },
         { id: 'openai', name: 'OpenAI', color: '#10a37f', placeholder: 'sk-...', description: 'GPT-5, o3, GPT-4.1, GPT-5 Mini' },
         { id: 'moonshot', name: 'Kimi (Moonshot)', color: '#6366f1', placeholder: 'sk-...', description: 'Kimi K2 Turbo' },
       ];
       
+      // Agent descriptions for the editor
+      const agentDescriptions = {
+        architect: {
+          purpose: 'Plans the information architecture before writing begins',
+          when: 'Use at project start and when major story changes are needed',
+          tips: [
+            'Creates story bible with objective reality',
+            'Designs disclosure schedules (when facts are revealed)',
+            'Sets tension curve targets per chapter',
+            'Outputs structured YAML for other agents to use'
+          ]
+        },
+        scribe: {
+          purpose: 'Writes prose from beat sheets while respecting information constraints',
+          when: 'Use for drafting chapters and revisions',
+          tips: [
+            'Follows beat sheet instructions exactly',
+            'Never reveals WITHHELD information',
+            'Shows character knowledge through behavior, not exposition',
+            'Applies feedback while preserving marked strengths'
+          ]
+        },
+        critic: {
+          purpose: 'Models reader experience without knowing story secrets',
+          when: 'Use after drafts to evaluate effectiveness',
+          tips: [
+            'Has NO access to story bible (reads blind)',
+            'Tracks what reader knows vs suspects vs questions',
+            'Assesses if tension hits targets',
+            'Identifies craft issues and strengths to preserve'
+          ]
+        },
+        keeper: {
+          purpose: 'Verifies information discipline and catches leakage',
+          when: 'Use as final gate before a chapter is "done"',
+          tips: [
+            'Compares draft against disclosure schedule',
+            'Flags premature revelations',
+            'Checks revision integrity',
+            'Pass/fail only—does not suggest fixes'
+          ]
+        }
+      };
+      
       return (
-        <div className="flex-1 p-8 overflow-y-auto">
-          <h2 className="font-display text-3xl mb-2" style={{ color: 'var(--text-primary)' }}>Settings</h2>
-          <p className="text-sm mb-8" style={{ color: 'var(--text-muted)' }}>Manage API keys and preferences</p>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Section Tabs */}
+          <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
+            <h2 className="font-display text-3xl mb-4" style={{ color: 'var(--text-primary)' }}>Settings</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveSection('general')}
+                className="px-4 py-2 text-sm font-body rounded transition-colors"
+                style={activeSection === 'general' 
+                  ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                  : { backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }
+                }
+              >
+                General
+              </button>
+              <button
+                onClick={() => setActiveSection('agents')}
+                className="px-4 py-2 text-sm font-body rounded transition-colors"
+                style={activeSection === 'agents' 
+                  ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                  : { backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }
+                }
+              >
+                Agent Prompts
+              </button>
+            </div>
+          </div>
           
-          <div className="max-w-2xl space-y-6">
-            {/* Theme Selection */}
-            <div>
-              <h3 className="font-body text-lg pb-2 mb-4" style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)' }}>Appearance</h3>
-              <div className="flex gap-3">
-                {Object.values(THEMES).map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => onThemeChange(t.id)}
-                    className="flex-1 p-4 rounded-lg transition-all"
-                    style={{
-                      backgroundColor: theme === t.id ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
-                      border: theme === t.id ? '2px solid var(--accent-gold)' : '2px solid var(--border-color)'
-                    }}
-                  >
-                    <div className="text-2xl mb-2">{t.icon}</div>
-                    <div className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{t.name}</div>
-                    <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* API Keys */}
-            <h3 className="font-body text-lg pb-2" style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)' }}>API Keys</h3>
-            
-            {providers.map(provider => (
-              <div key={provider.id} className="rounded-lg p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }}></span>
-                  <span className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{provider.name}</span>
-                  {apiKeys[provider.id] && (
-                    <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Connected</span>
-                  )}
+          <div className="flex-1 overflow-y-auto p-6">
+            {activeSection === 'general' && (
+              <div className="max-w-2xl space-y-6">
+                {/* Theme Selection */}
+                <div>
+                  <h3 className="font-body text-lg pb-2 mb-4" style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)' }}>Appearance</h3>
+                  <div className="flex gap-3">
+                    {Object.values(THEMES).map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => onThemeChange(t.id)}
+                        className="flex-1 p-4 rounded-lg transition-all"
+                        style={{
+                          backgroundColor: theme === t.id ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                          border: theme === t.id ? '2px solid var(--accent-gold)' : '2px solid var(--border-color)'
+                        }}
+                      >
+                        <div className="text-2xl mb-2">{t.icon}</div>
+                        <div className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{t.name}</div>
+                        <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{t.description}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{provider.description}</p>
                 
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={inputs[provider.id]}
-                    onChange={(e) => setInputs(prev => ({ ...prev, [provider.id]: e.target.value }))}
-                    placeholder={provider.placeholder}
-                    className="flex-1 rounded px-3 py-2 font-mono text-sm focus:outline-none"
-                    style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
-                  />
-                  <button
-                    onClick={() => handleSave(provider.id)}
-                    className="font-body text-sm px-4 py-2 rounded transition-colors"
-                    style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
-                  >
-                    {saved[provider.id] ? '✓' : 'Save'}
-                  </button>
-                  {apiKeys[provider.id] && (
+                {/* API Keys */}
+                <h3 className="font-body text-lg pb-2" style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-color)' }}>API Keys</h3>
+                
+                {providers.map(provider => (
+                  <div key={provider.id} className="rounded-lg p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: provider.color }}></span>
+                      <span className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{provider.name}</span>
+                      {apiKeys[provider.id] && (
+                        <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Connected</span>
+                      )}
+                    </div>
+                    <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{provider.description}</p>
+                    
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={inputs[provider.id]}
+                        onChange={(e) => setInputs(prev => ({ ...prev, [provider.id]: e.target.value }))}
+                        placeholder={provider.placeholder}
+                        className="flex-1 rounded px-3 py-2 font-mono text-sm focus:outline-none"
+                        style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      />
+                      <button
+                        onClick={() => handleSave(provider.id)}
+                        className="font-body text-sm px-4 py-2 rounded transition-colors"
+                        style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                      >
+                        {saved[provider.id] ? '✓' : 'Save'}
+                      </button>
+                      {apiKeys[provider.id] && (
+                        <button
+                          onClick={() => handleClear(provider.id)}
+                          className="font-body text-sm px-4 py-2 rounded transition-colors"
+                          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                
+                <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+                  <h3 className="font-body text-lg mb-4" style={{ color: 'var(--text-primary)' }}>Data Management</h3>
+                  <div className="flex gap-4">
                     <button
-                      onClick={() => handleClear(provider.id)}
+                      onClick={() => {
+                        const data = {
+                          chats: Storage.get('chats'),
+                          story_bible: Storage.get('story_bible'),
+                          tension_curve: Storage.get('tension_curve'),
+                          chapters: Storage.get('chapters'),
+                          custom_prompts: Storage.get('custom_prompts')
+                        };
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'syuzhet-export.json';
+                        a.click();
+                      }}
                       className="font-body text-sm px-4 py-2 rounded transition-colors"
-                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
-                      Clear
+                      Export Project Data
                     </button>
-                  )}
+                    <button
+                      onClick={() => {
+                        if (confirm('Clear all project data? This cannot be undone.')) {
+                          Storage.delete('chats');
+                          Storage.delete('story_bible');
+                          Storage.delete('tension_curve');
+                          Storage.delete('chapters');
+                          window.location.reload();
+                        }
+                      }}
+                      className="font-body text-sm px-4 py-2 rounded transition-colors"
+                      style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}
+                    >
+                      Clear All Data
+                    </button>
+                  </div>
                 </div>
               </div>
-            ))}
+            )}
             
-            <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
-              <h3 className="font-body text-lg mb-4" style={{ color: 'var(--text-primary)' }}>Data Management</h3>
-              <div className="flex gap-4">
-                <button
-                  onClick={() => {
-                    const data = {
-                      chats: Storage.get('chats'),
-                      story_bible: Storage.get('story_bible'),
-                      tension_curve: Storage.get('tension_curve'),
-                      chapters: Storage.get('chapters')
-                    };
-                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'syuzhet-export.json';
-                    a.click();
-                  }}
-                  className="font-body text-sm px-4 py-2 rounded transition-colors"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
-                >
-                  Export Project Data
-                </button>
-                <button
-                  onClick={() => {
-                    if (confirm('Clear all project data? This cannot be undone.')) {
-                      Storage.delete('chats');
-                      Storage.delete('story_bible');
-                      Storage.delete('tension_curve');
-                      Storage.delete('chapters');
-                      window.location.reload();
-                    }
-                  }}
-                  className="font-body text-sm px-4 py-2 rounded transition-colors"
-                  style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}
-                >
-                  Clear All Data
-                </button>
+            {activeSection === 'agents' && (
+              <div className="flex gap-6 h-full">
+                {/* Agent Selector */}
+                <div className="w-48 flex-shrink-0">
+                  <p className="text-xs uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>Select Agent</p>
+                  <div className="space-y-2">
+                    {Object.values(AGENTS).map(agent => (
+                      <button
+                        key={agent.id}
+                        onClick={() => setSelectedAgent(agent.id)}
+                        className="w-full text-left p-3 rounded-lg transition-all"
+                        style={{
+                          backgroundColor: selectedAgent === agent.id ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                          border: selectedAgent === agent.id ? '2px solid var(--accent-gold)' : '2px solid transparent'
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{agent.icon}</span>
+                          <span className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{agent.name}</span>
+                          {customPrompts[agent.id] && (
+                            <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}>
+                              ✎
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{agent.subtitle}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Prompt Editor */}
+                <div className="flex-1 flex flex-col min-w-0">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="font-body text-lg" style={{ color: 'var(--text-primary)' }}>
+                        {AGENTS[selectedAgent].icon} {AGENTS[selectedAgent].name} Prompt
+                      </h3>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {agentDescriptions[selectedAgent].purpose}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isPromptModified && (
+                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(201, 162, 39, 0.2)', color: 'var(--accent-gold)' }}>
+                          Customized
+                        </span>
+                      )}
+                      {hasUnsavedChanges && (
+                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}>
+                          Unsaved changes
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Usage Tips */}
+                  <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <p className="text-xs font-medium mb-2" style={{ color: 'var(--accent-gold)' }}>
+                      When to use: {agentDescriptions[selectedAgent].when}
+                    </p>
+                    <ul className="text-xs space-y-1" style={{ color: 'var(--text-muted)' }}>
+                      {agentDescriptions[selectedAgent].tips.map((tip, i) => (
+                        <li key={i}>• {tip}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  
+                  {/* Context Access Badge */}
+                  <div className="mb-3 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Has access to:</span>
+                    {AGENTS[selectedAgent].contextAccess.map(ctx => (
+                      <span 
+                        key={ctx} 
+                        className="text-xs px-2 py-0.5 rounded"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                      >
+                        {ctx.replace('_', ' ')}
+                      </span>
+                    ))}
+                  </div>
+                  
+                  {/* Prompt Textarea */}
+                  <textarea
+                    value={promptDraft}
+                    onChange={(e) => setPromptDraft(e.target.value)}
+                    className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none"
+                    style={{ 
+                      backgroundColor: 'var(--bg-input)', 
+                      border: '1px solid var(--border-color)', 
+                      color: 'var(--text-primary)',
+                      minHeight: '300px'
+                    }}
+                    placeholder="Enter custom system prompt for this agent..."
+                  />
+                  
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-between mt-4">
+                    <button
+                      onClick={handleResetPrompt}
+                      className="font-body text-sm px-4 py-2 rounded transition-colors"
+                      style={{ 
+                        backgroundColor: 'var(--bg-tertiary)', 
+                        color: isPromptModified ? 'var(--accent-crimson)' : 'var(--text-muted)',
+                        opacity: isPromptModified ? 1 : 0.5
+                      }}
+                      disabled={!isPromptModified}
+                    >
+                      Reset to Default
+                    </button>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setPromptDraft(AGENTS[selectedAgent].systemPrompt)}
+                        className="font-body text-sm px-4 py-2 rounded transition-colors"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                      >
+                        View Default
+                      </button>
+                      <button
+                        onClick={handleSavePrompt}
+                        className="font-body text-sm px-6 py-2 rounded transition-colors"
+                        style={{ 
+                          backgroundColor: hasUnsavedChanges ? 'var(--accent-gold)' : 'var(--bg-tertiary)', 
+                          color: hasUnsavedChanges ? 'var(--bg-primary)' : 'var(--text-muted)' 
+                        }}
+                      >
+                        {promptSaved ? '✓ Saved' : 'Save Prompt'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Help Text */}
+                  <p className="text-xs mt-4" style={{ color: 'var(--text-muted)' }}>
+                    Customized prompts are used immediately for new conversations. The project context (story bible, chapters, etc.) 
+                    is automatically appended based on each agent's access permissions.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       );
@@ -2324,6 +2600,406 @@ Rules:
               <p className="text-xs">Add a <code>disclosure_schedule</code> section to your story bible YAML, or click "+ Add Fact" above.</p>
             </div>
           )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // WORD COUNT PANEL
+    // ============================================
+    function WordCountPanel({ chapters }) {
+      const [goals, setGoals] = useState(() => {
+        const saved = Storage.get('writing_goals') || {};
+        return {
+          dailyTarget: saved.dailyTarget || 1000,
+          manuscriptTarget: saved.manuscriptTarget || 80000,
+          ...saved
+        };
+      });
+      
+      const [writingHistory, setWritingHistory] = useState(() => {
+        return Storage.get('writing_history') || {};
+      });
+      
+      const [sessionStart, setSessionStart] = useState(() => {
+        const saved = Storage.get('session_start');
+        return saved || null;
+      });
+      
+      const [sessionStartCount, setSessionStartCount] = useState(() => {
+        return Storage.get('session_start_count') || 0;
+      });
+      
+      // Calculate word count for text
+      const countWords = (text) => {
+        if (!text) return 0;
+        return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+      };
+      
+      // Calculate chapter stats
+      const chapterStats = useMemo(() => {
+        const stats = Object.entries(chapters)
+          .map(([num, ch]) => ({
+            number: parseInt(num),
+            title: ch.title || `Chapter ${num}`,
+            draftWords: countWords(ch.draft),
+            beatsWords: countWords(ch.beats),
+            feedbackWords: countWords(ch.feedback)
+          }))
+          .sort((a, b) => a.number - b.number);
+        return stats;
+      }, [chapters]);
+      
+      // Total manuscript words
+      const totalWords = useMemo(() => {
+        return chapterStats.reduce((sum, ch) => sum + ch.draftWords, 0);
+      }, [chapterStats]);
+      
+      // Session word count
+      const sessionWords = useMemo(() => {
+        if (!sessionStart) return 0;
+        return Math.max(0, totalWords - sessionStartCount);
+      }, [totalWords, sessionStartCount, sessionStart]);
+      
+      // Today's date key
+      const todayKey = new Date().toISOString().split('T')[0];
+      
+      // Today's words
+      const todayWords = writingHistory[todayKey] || 0;
+      
+      // Update today's count when total changes
+      useEffect(() => {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayKey = yesterday.toISOString().split('T')[0];
+        const yesterdayTotal = writingHistory[`total_${yesterdayKey}`] || 0;
+        
+        // Calculate words written today
+        const wordsToday = Math.max(0, totalWords - yesterdayTotal);
+        
+        if (wordsToday !== todayWords || !writingHistory[`total_${todayKey}`]) {
+          const updated = {
+            ...writingHistory,
+            [todayKey]: wordsToday,
+            [`total_${todayKey}`]: totalWords
+          };
+          setWritingHistory(updated);
+          Storage.set('writing_history', updated);
+        }
+      }, [totalWords]);
+      
+      // Calculate streak
+      const streak = useMemo(() => {
+        let count = 0;
+        const today = new Date();
+        
+        // Check if today counts (met goal)
+        if (todayWords >= goals.dailyTarget) {
+          count = 1;
+        }
+        
+        // Go back in time
+        for (let i = 1; i < 365; i++) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const key = date.toISOString().split('T')[0];
+          const dayWords = writingHistory[key] || 0;
+          
+          if (dayWords >= goals.dailyTarget) {
+            count++;
+          } else {
+            break;
+          }
+        }
+        
+        return count;
+      }, [writingHistory, goals.dailyTarget, todayWords]);
+      
+      // Start session
+      const startSession = () => {
+        const now = Date.now();
+        setSessionStart(now);
+        setSessionStartCount(totalWords);
+        Storage.set('session_start', now);
+        Storage.set('session_start_count', totalWords);
+      };
+      
+      // End session
+      const endSession = () => {
+        setSessionStart(null);
+        Storage.delete('session_start');
+        Storage.delete('session_start_count');
+      };
+      
+      // Save goals
+      const saveGoals = (newGoals) => {
+        setGoals(newGoals);
+        Storage.set('writing_goals', newGoals);
+      };
+      
+      // Max words for bar scaling
+      const maxChapterWords = Math.max(1, ...chapterStats.map(ch => ch.draftWords));
+      
+      // Progress percentages
+      const dailyProgress = Math.min(100, (todayWords / goals.dailyTarget) * 100);
+      const manuscriptProgress = Math.min(100, (totalWords / goals.manuscriptTarget) * 100);
+      
+      // Last 7 days for chart
+      const last7Days = useMemo(() => {
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          const key = date.toISOString().split('T')[0];
+          days.push({
+            date: key,
+            label: date.toLocaleDateString('en-US', { weekday: 'short' }),
+            words: writingHistory[key] || 0
+          });
+        }
+        return days;
+      }, [writingHistory]);
+      
+      const maxDayWords = Math.max(goals.dailyTarget, ...last7Days.map(d => d.words));
+      
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
+            <h2 className="font-display text-3xl mb-2" style={{ color: 'var(--text-primary)' }}>Writing Stats</h2>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Track your progress and stay motivated</p>
+          </div>
+          
+          <div className="flex-1 p-6 overflow-auto">
+            {/* Top Stats Cards */}
+            <div className="grid grid-cols-4 gap-4 mb-8">
+              {/* Total Words */}
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Total Words</p>
+                <p className="text-3xl font-display" style={{ color: 'var(--accent-gold)' }}>{totalWords.toLocaleString()}</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  {chapterStats.length} chapter{chapterStats.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              
+              {/* Today's Words */}
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Today</p>
+                <p className="text-3xl font-display" style={{ color: todayWords >= goals.dailyTarget ? '#4ade80' : 'var(--text-primary)' }}>
+                  {todayWords.toLocaleString()}
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  / {goals.dailyTarget.toLocaleString()} goal
+                </p>
+              </div>
+              
+              {/* Session Words */}
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Session</p>
+                <p className="text-3xl font-display" style={{ color: 'var(--text-primary)' }}>
+                  {sessionStart ? sessionWords.toLocaleString() : '—'}
+                </p>
+                {sessionStart ? (
+                  <button 
+                    onClick={endSession}
+                    className="text-xs mt-1 underline"
+                    style={{ color: 'var(--accent-crimson)' }}
+                  >
+                    End session
+                  </button>
+                ) : (
+                  <button 
+                    onClick={startSession}
+                    className="text-xs mt-1 underline"
+                    style={{ color: 'var(--accent-gold)' }}
+                  >
+                    Start session
+                  </button>
+                )}
+              </div>
+              
+              {/* Streak */}
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Streak</p>
+                <p className="text-3xl font-display" style={{ color: streak > 0 ? '#f97316' : 'var(--text-primary)' }}>
+                  {streak} 🔥
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  day{streak !== 1 ? 's' : ''} in a row
+                </p>
+              </div>
+            </div>
+            
+            {/* Progress Bars */}
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              {/* Daily Progress */}
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Daily Goal</p>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {Math.round(dailyProgress)}%
+                  </p>
+                </div>
+                <div className="h-4 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  <div 
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ 
+                      width: `${dailyProgress}%`,
+                      backgroundColor: dailyProgress >= 100 ? '#4ade80' : 'var(--accent-gold)'
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between mt-2">
+                  <input
+                    type="number"
+                    value={goals.dailyTarget}
+                    onChange={(e) => saveGoals({ ...goals, dailyTarget: parseInt(e.target.value) || 0 })}
+                    className="w-24 px-2 py-1 rounded text-xs"
+                    style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                  />
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>words/day</span>
+                </div>
+              </div>
+              
+              {/* Manuscript Progress */}
+              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Manuscript Goal</p>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {Math.round(manuscriptProgress)}%
+                  </p>
+                </div>
+                <div className="h-4 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  <div 
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ 
+                      width: `${manuscriptProgress}%`,
+                      backgroundColor: manuscriptProgress >= 100 ? '#4ade80' : 'var(--accent-gold)'
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between mt-2">
+                  <input
+                    type="number"
+                    value={goals.manuscriptTarget}
+                    onChange={(e) => saveGoals({ ...goals, manuscriptTarget: parseInt(e.target.value) || 0 })}
+                    className="w-24 px-2 py-1 rounded text-xs"
+                    style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                  />
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>total words</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Weekly Chart */}
+            <div className="p-4 rounded-lg mb-8" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+              <p className="text-sm font-medium mb-4" style={{ color: 'var(--text-primary)' }}>Last 7 Days</p>
+              <div className="flex items-end gap-2 h-32">
+                {last7Days.map((day, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center">
+                    <div 
+                      className="w-full rounded-t transition-all duration-300 relative group"
+                      style={{ 
+                        height: `${Math.max(4, (day.words / maxDayWords) * 100)}%`,
+                        backgroundColor: day.words >= goals.dailyTarget ? '#4ade80' : 'var(--accent-gold)',
+                        opacity: day.date === todayKey ? 1 : 0.7
+                      }}
+                    >
+                      <div 
+                        className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {day.words.toLocaleString()}
+                      </div>
+                    </div>
+                    <p className="text-xs mt-2" style={{ color: day.date === todayKey ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                      {day.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {/* Goal line */}
+              <div className="relative mt-2">
+                <div 
+                  className="absolute w-full border-t border-dashed"
+                  style={{ 
+                    bottom: `${(goals.dailyTarget / maxDayWords) * 128 + 40}px`,
+                    borderColor: 'var(--text-muted)',
+                    opacity: 0.5
+                  }}
+                />
+              </div>
+            </div>
+            
+            {/* Per-Chapter Breakdown */}
+            <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+              <p className="text-sm font-medium mb-4" style={{ color: 'var(--text-primary)' }}>Words by Chapter</p>
+              
+              {chapterStats.length === 0 ? (
+                <p className="text-sm text-center py-8" style={{ color: 'var(--text-muted)' }}>
+                  No chapters yet. Create chapters in the Chapters tab.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {chapterStats.map((ch) => (
+                    <div key={ch.number} className="flex items-center gap-4">
+                      <div className="w-20 text-sm" style={{ color: 'var(--text-primary)' }}>
+                        Ch {ch.number}
+                      </div>
+                      <div className="flex-1 h-6 rounded overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                        <div 
+                          className="h-full rounded transition-all duration-300"
+                          style={{ 
+                            width: `${(ch.draftWords / maxChapterWords) * 100}%`,
+                            backgroundColor: 'var(--accent-gold)'
+                          }}
+                        />
+                      </div>
+                      <div className="w-20 text-right text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {ch.draftWords.toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Average */}
+              {chapterStats.length > 0 && (
+                <div className="mt-4 pt-4 flex justify-between text-sm" style={{ borderTop: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Average per chapter:</span>
+                  <span style={{ color: 'var(--text-primary)' }}>
+                    {Math.round(totalWords / chapterStats.length).toLocaleString()} words
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {/* Estimates */}
+            {totalWords > 0 && chapterStats.length > 0 && (
+              <div className="mt-6 p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <p className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>Estimates</p>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-display" style={{ color: 'var(--text-primary)' }}>
+                      {Math.round(totalWords / 250)}
+                    </p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>pages (250 words/page)</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-display" style={{ color: 'var(--text-primary)' }}>
+                      {Math.ceil((goals.manuscriptTarget - totalWords) / goals.dailyTarget)}
+                    </p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>days to complete</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-display" style={{ color: 'var(--text-primary)' }}>
+                      ~{Math.round(totalWords / 200)} min
+                    </p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>read time (200 wpm)</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
