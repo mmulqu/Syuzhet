@@ -1,0 +1,47 @@
+# Scribe State
+# Tracks current writing and revision status
+
+current_chapter: 0
+draft_version: 0
+
+# Stylistic notes to maintain consistency
+voice_notes: ""
+  # Example: "Short sentences in action scenes. Marcus's POV uses more abstractions than Sarah's."
+
+# Tracks what feedback has been applied
+applied_feedback: []
+  # Example:
+  # - issue_id: "C-7-03"
+  #   severity: "high"
+  #   action: "Removed explicit motive statement in para 12"
+  #   version_applied: 2
+
+# Spans marked as strong by Critic—NEVER modify these
+preserved_spans: []
+  # Example:
+  # - "The coffee had gone cold in the way of neglected things"
+  # - "Marcus watched until there was nothing left but smoke"
+
+# Flagged conflicts between feedback and preserved spans
+conflicts: []
+  # Example:
+  # - issue_id: "C-7-05"
+  #   feedback: "This paragraph is too long, break it up"
+  #   preserved_span: "The coffee had gone cold..."
+  #   resolution: "Kept preserve span verbatim, flagged to Critic"
+
+# Completed chapters
+completed_chapters: []
+  # Example: [1, 2, 3, 4, 5, 6, 7]
+
+# Recurring patterns to watch for
+recurring_issues: []
+  # Example:
+  # - "Tendency to use 'she realized' too often"
+  # - "Over-explaining character emotions"
+
+# Notes for future chapters
+notes_for_next: []
+  # Example:
+  # - "In Ch 8, Marcus and Sarah's first direct conversation—maintain tension"
+  # - "Establish Sarah's coffee-drinking ritual early"

@@ -1,0 +1,75 @@
+# Critic State
+# Tracks evaluation history and cumulative reader state
+
+chapters_reviewed: []
+  # Example: [1, 2, 3, 4, 5, 6, 7]
+
+# Patterns identified across multiple chapters
+recurring_issues: []
+  # Example:
+  # - "Tendency to state emotions directly ('he felt guilty')"
+  # - "Overuses 'she realized' as transition"
+  # - "Sometimes reveals character motivations too explicitly"
+
+recurring_strengths: []
+  # Example:
+  # - "Strong concrete imagery, especially setting descriptions"
+  # - "Dialogue feels natural and has good subtext"
+  # - "Pacing within action scenes is consistently good"
+
+# Cumulative reader state (updated per chapter)
+# This represents what a reader knows after reading all chapters so far
+reader_state:
+  confirmed_beliefs: []
+    # Example:
+    # - "Elena Reeves is dead"
+    # - "Death officially ruled suicide"
+    # - "Sarah Chen is detective investigating"
+    # - "Marcus Webb was Elena's friend"
+    # - "Sarah's father Thomas has Alzheimer's"
+    # - "Suicide note was found"
+
+  active_suspicions: []
+    # Example:
+    # - suspicion: "Suicide note might be forged"
+    #   confidence: "moderate"
+    #   based_on: "Handwriting expert's hedging comment"
+    #   introduced_in: 2
+    #
+    # - suspicion: "Marcus is hiding something about Elena"
+    #   confidence: "strong"
+    #   based_on: "Knows detail he shouldn't, burned photo"
+    #   introduced_in: 3
+
+  burning_questions: []
+    # Example:
+    # - "Was Elena actually murdered?"
+    # - "Why did Marcus burn that photograph?"
+    # - "What did Elena discover before she died?"
+    # - "Did Thomas really see something at the lighthouse?"
+
+  dramatic_irony_active: []
+    # Example:
+    # - reader_knows: "Suicide note is definitely forged (ch 14)"
+    #   character_doesnt: "Sarah still uncertain"
+    #   active_since: 14
+
+# Tension tracking across chapters
+tension_history: []
+  # Example:
+  # - chapter: 1
+  #   target: 3
+  #   actual: 3
+  #   met_target: true
+  #
+  # - chapter: 7
+  #   target: 6
+  #   actual: 5
+  #   met_target: false
+  #   variance: -1
+
+# Notes for future evaluation
+notes_for_next_chapters: []
+  # Example:
+  # - "Watch for Marcus POV in ch 11 - needs to show guilt without stating it"
+  # - "Ch 14 is major reveal (forged note) - ensure sufficient buildup"

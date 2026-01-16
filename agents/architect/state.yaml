@@ -1,0 +1,45 @@
+# Architect State
+# Tracks the overall planning and design status
+
+story_status: planning  # planning | active | complete
+current_chapter: 0
+story_bible_locked: false
+
+# Track what's been designed
+chapters_planned: []
+chapters_handed_to_scribe: []
+
+# Disclosure schedule overview (full details in story_bible.yaml)
+disclosure_schedule: []
+  # Example:
+  # - fact_id: killer_identity
+  #   hinted_at: [3, 7]
+  #   suspected_by_reader: 12
+  #   confirmed: 18
+
+# Tension curve overview (full details in artifacts/tension_curve.yaml)
+tension_curve: {}
+  # Example:
+  # 1: 3
+  # 2: 4
+  # 7: 6
+
+# Character knowledge states (full details in story_bible.yaml)
+character_knowledge: {}
+  # Example:
+  # marcus:
+  #   knows: ["killed Elena"]
+  #   believes_falsely: ["no witnesses"]
+
+# Design notes and decisions
+design_notes:
+  - "Three-act structure, 24 chapters"
+  - "Central mystery: whodunit with unreliable witness"
+  - "Key theme: reliability of memory"
+
+# Feedback from other agents that might inform future planning
+feedback_from_critic: []
+  # Example:
+  # - chapter: 5
+  #   note: "Reader too confused about timeline"
+  #   action_taken: "Added clarifying detail to ch6 beats"

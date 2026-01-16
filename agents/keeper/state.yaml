@@ -1,0 +1,66 @@
+# Keeper State
+# Tracks verification history and quality audit trail
+
+chapters_cleared: []
+  # Example: [1, 2, 3, 4, 5, 6, 7]
+
+# Log of all leakage issues (including resolved ones)
+leakage_log: []
+  # Example:
+  # - chapter: 5
+  #   version: 1
+  #   fact: "Marcus killed Elena"
+  #   severity: "critical"
+  #   quote: "Marcus thought about killing Elena"
+  #   resolution: "fixed_in_v2"
+  #   fixed_at: "2026-01-15T14:30:00Z"
+  #
+  # - chapter: 7
+  #   version: 1
+  #   fact: "Marcus and Elena are siblings"
+  #   severity: "near_miss"
+  #   quote: "They had the same gray-green eyes"
+  #   resolution: "acceptable_breadcrumb"
+  #   cleared: true
+
+# Log of constraint violations
+constraint_violations: []
+  # Example:
+  # - chapter: 3
+  #   version: 1
+  #   constraint: "word_count"
+  #   target: 2000
+  #   actual: 2850
+  #   resolution: "fixed_in_v2"
+
+# Verification history - how many attempts each chapter took
+verification_history: {}
+  # Example:
+  # 1:
+  #   - v1: "passed"
+  # 3:
+  #   - v1: "failed - leakage"
+  #   - v2: "failed - preserved span modified"
+  #   - v3: "passed"
+  # 7:
+  #   - v1: "failed - leakage + POV violation"
+  #   - v2: "passed"
+
+# Statistics
+stats:
+  total_chapters_reviewed: 0
+  total_rejections: 0
+  average_attempts_per_chapter: 0.0
+  most_common_rejection_reason: ""
+  # Example:
+  # most_common_rejection_reason: "information_leakage"
+
+# Notes for monitoring
+monitoring_notes: []
+  # Example:
+  # - chapter: 7
+  #   note: "Near miss on sibling connection - watch cumulative breadcrumbs in future chapters"
+  #   monitor_in: [8, 9, 10]
+  #
+  # - chapter: 12
+  #   note: "Reader should suspect Marcus by now - verify ch13+ don't over-hint"

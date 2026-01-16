@@ -78,24 +78,97 @@ At any moment in a story, there are **four distinct information layers**:
 
 ---
 
+## The Multi-Agent System: Loom
+
+This repository provides **two approaches** to enforcing information discipline:
+
+### Approach 1: Loom (Multi-Agent) - **Recommended**
+
+Four specialized agents coordinate to write fiction:
+
+| Agent | Role | Responsibility |
+|-------|------|----------------|
+| **Architect** | Designer | Story bible, disclosure schedule, beat sheets |
+| **Scribe** | Writer | Prose generation and revision |
+| **Critic** | Evaluator | Reader simulation, tension, craft |
+| **Keeper** | Verifier | Information discipline enforcement |
+
+**Workflow:**
+```
+Architect (plans) → Scribe (writes) → Critic (evaluates) →
+Scribe (revises) → Keeper (verifies) → [next chapter]
+```
+
+**Key innovation:** Each agent has one clear responsibility, preventing knowledge contamination.
+
+**Files:**
+- `CLAUDE.md` - Multi-agent system overview
+- `ORCHESTRATION.md` - How to coordinate agents
+- `agents/*/CLAUDE.md` - Individual agent identities
+- `agents/*/state.yaml` - Agent state tracking
+
+**When to use:** Any project where information control is critical (mystery, thriller, suspense).
+
+### Approach 2: Single-Agent Prompts (Legacy)
+
+Comprehensive prompts for a single LLM:
+- `prompts/chapter_generator.md` - Generator with discipline rules
+- `prompts/reader_simulation_critic.md` - Reader cognition modeling
+- `prompts/tension_auditor_critic.md` - Tension effectiveness audit
+- `verification/leakage_checker.py` - Automated verification script
+
+**When to use:** Simpler projects or when multi-agent coordination is impractical.
+
+---
+
 ## Architecture Overview
 
+### Multi-Agent Structure (Loom)
+
 ```
-repo/
+loom/
+├── CLAUDE.md                     # Multi-agent system overview
+├── README.md                     # This file - comprehensive documentation
+├── ORCHESTRATION.md              # How to coordinate the 4 agents
+├── WORKFLOW.md                   # Detailed workflow guide
+├── QUICKSTART.md                 # 5-step getting started
+│
 ├── story_bible.yaml              # SOURCE OF TRUTH: Objective reality + disclosure schedule
-├── tension_curve.yaml            # Target tension levels per chapter
-├── chapter_plans/                # Beat sheets with information tags
-│   ├── TEMPLATE_chapter_beats.yaml
-│   ├── ch01_beats.yaml
-│   └── ch07_beats.yaml (example)
-├── drafts/                       # Chapter drafts (generated prose)
-├── prompts/                      # LLM prompts for generation and criticism
-│   ├── chapter_generator.md      # Generator with information discipline rules
+│
+├── agents/                       # The Four Agents
+│   ├── architect/
+│   │   ├── CLAUDE.md             # Architect identity & instructions
+│   │   └── state.yaml            # Planning status
+│   ├── scribe/
+│   │   ├── CLAUDE.md             # Scribe identity & instructions
+│   │   └── state.yaml            # Writing status
+│   ├── critic/
+│   │   ├── CLAUDE.md             # Critic identity & instructions (3 lenses)
+│   │   └── state.yaml            # Evaluation history
+│   └── keeper/
+│       ├── CLAUDE.md             # Keeper identity & instructions
+│       └── state.yaml            # Verification audit trail
+│
+├── chapters/                     # Per-chapter artifacts
+│   └── ch01/
+│       ├── beats.yaml            # Architect's plan (what happens, what's withheld)
+│       ├── draft.md              # Scribe's prose
+│       ├── feedback.json         # Critic's evaluation
+│       └── verification.json     # Keeper's pass/fail verdict
+│
+├── artifacts/
+│   └── tension_curve.yaml        # Tension targets per chapter
+│
+├── prompts/                      # Legacy single-agent prompts
+│   ├── chapter_generator.md
 │   ├── reader_simulation_critic.md
 │   └── tension_auditor_critic.md
-├── verification/                 # Automated checks
-│   └── leakage_checker.py        # Detects premature disclosure
-└── feedback/                     # Critic outputs (JSON)
+│
+├── verification/                 # Legacy automated checks
+│   └── leakage_checker.py
+│
+└── examples/                     # Templates and examples
+    └── reader_state_template.md
 ```
 
 ---
