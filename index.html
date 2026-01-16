@@ -600,6 +600,94 @@ Rules:
     }
 
     // ============================================
+    // ARCHITECT VERIFICATION SYSTEM
+    // ============================================
+    
+    // Check what YAML structures are present/missing in Architect output
+    function verifyArchitectOutput(content) {
+      const checks = {
+        disclosure_schedule: {
+          present: false,
+          pattern: /disclosure_schedule:/i,
+          description: 'Disclosure schedule tracking when facts are hinted → suspected → confirmed'
+        },
+        character_knowledge: {
+          present: false,
+          pattern: /character_knowledge:/i,
+          description: 'Character knowledge maps (knows / doesnt_know / believes_falsely)'
+        },
+        tension_curve: {
+          present: false,
+          pattern: /tension_curve:|chapters:/i,
+          description: 'Tension curve with intensity levels'
+        },
+        withheld_per_chapter: {
+          present: false,
+          pattern: /withheld:\s*\n\s*-/i,
+          description: 'Withheld information lists per chapter'
+        },
+        hinted_suspected_confirmed: {
+          present: false,
+          pattern: /hinted_at:|suspected_by_reader:|confirmed:/i,
+          description: 'Disclosure timing (hinted_at, suspected_by_reader, confirmed)'
+        }
+      };
+      
+      // Run checks
+      for (const [key, check] of Object.entries(checks)) {
+        check.present = check.pattern.test(content);
+      }
+      
+      const missing = Object.entries(checks)
+        .filter(([_, check]) => !check.present)
+        .map(([key, check]) => ({ key, ...check }));
+      
+      const present = Object.entries(checks)
+        .filter(([_, check]) => check.present)
+        .map(([key, check]) => ({ key, ...check }));
+      
+      return { checks, missing, present, isComplete: missing.length === 0 };
+    }
+    
+    // Generate follow-up prompt based on what's missing
+    function generateCompletionPrompt(missing, originalContent) {
+      if (missing.length === 0) return null;
+      
+      const missingList = missing.map(m => `- ${m.description}`).join('\n');
+      
+      return `Your previous output is missing some required YAML structures. Please add ONLY the missing sections below. Do not repeat content you already provided.
+
+**Missing structures:**
+${missingList}
+
+**Required formats:**
+
+${missing.some(m => m.key === 'disclosure_schedule' || m.key === 'hinted_suspected_confirmed') ? `
+disclosure_schedule:
+  secret_name:
+    description: "What is objectively true"
+    hinted_at: [chapter_numbers]
+    suspected_by_reader: chapter_number
+    confirmed: chapter_number
+` : ''}
+${missing.some(m => m.key === 'character_knowledge') ? `
+character_knowledge:
+  character_name:
+    knows: [list of facts they know]
+    doesnt_know: [list of facts hidden from them]
+    believes_falsely: [list of false beliefs]
+` : ''}
+${missing.some(m => m.key === 'withheld_per_chapter') ? `
+Each chapter in tension_curve needs:
+  withheld:
+    - "fact or information hidden from reader"
+    - "another withheld element"
+` : ''}
+
+Please output ONLY the missing YAML sections now.`;
+    }
+
+    // ============================================
     // MAIN APP
     // ============================================
     function App() {
@@ -625,6 +713,10 @@ Rules:
       const [customPrompts, setCustomPrompts] = useState({});
       const [view, setView] = useState('chat'); // chat, bible, chapters, settings
       const [isLoading, setIsLoading] = useState(false);
+      
+      // Verification state (for Architect)
+      const [verificationResult, setVerificationResult] = useState(null);
+      const [verifierModel, setVerifierModel] = useState('claude-sonnet-4-5-20250929'); // model for verification/completion passes
 
       // Apply theme to document
       useEffect(() => {
@@ -635,6 +727,12 @@ Rules:
       const saveTheme = (newTheme) => {
         setTheme(newTheme);
         Storage.set('theme', newTheme);
+      };
+      
+      // Save verifier model
+      const saveVerifierModel = (model) => {
+        setVerifierModel(model);
+        Storage.set('verifier_model', model);
       };
 
       // Load initial state
@@ -647,6 +745,9 @@ Rules:
         
         const savedModel = Storage.get('selected_model');
         if (savedModel && MODELS[savedModel]) setSelectedModel(savedModel);
+        
+        const savedVerifierModel = Storage.get('verifier_model');
+        if (savedVerifierModel && MODELS[savedVerifierModel]) setVerifierModel(savedVerifierModel);
         
         const savedChats = Storage.get('chats') || {};
         setChats(savedChats);
@@ -811,6 +912,41 @@ Rules:
         }
         
         setIsLoading(false);
+      };
+
+      // Verify Architect output and get missing structures
+      const runVerification = () => {
+        const chat = chats[currentChatId];
+        if (!chat || chat.agentId !== 'architect') return;
+        
+        // Find the last assistant message
+        const lastAssistant = [...chat.messages].reverse().find(m => m.role === 'assistant' && !m.isError);
+        if (!lastAssistant) return;
+        
+        const result = verifyArchitectOutput(lastAssistant.content);
+        setVerificationResult(result);
+        return result;
+      };
+      
+      // Send completion prompt to fill in missing structures
+      const sendCompletionPrompt = async () => {
+        if (!verificationResult || verificationResult.isComplete) return;
+        
+        const completionPrompt = generateCompletionPrompt(verificationResult.missing);
+        if (!completionPrompt) return;
+        
+        // Get API key for verification model
+        const verifyProvider = MODELS[verifierModel]?.provider;
+        const verifyApiKey = apiKeys[verifyProvider];
+        
+        if (!verifyApiKey) {
+          alert(`Please add an API key for ${PROVIDERS[verifyProvider]?.name} to use for completion, or change the verification model.`);
+          return;
+        }
+        
+        // Send as a regular message
+        await sendMessage(completionPrompt);
+        setVerificationResult(null); // Clear after sending
       };
 
       // Delete chat
@@ -1059,6 +1195,11 @@ Rules:
                     isLoading={isLoading}
                     agent={AGENTS[currentAgent]}
                     hasValidKey={hasValidKey}
+                    verificationResult={verificationResult}
+                    onVerify={runVerification}
+                    onComplete={sendCompletionPrompt}
+                    verifierModel={verifierModel}
+                    apiKeys={apiKeys}
                   />
                 ) : (
                   <div className="flex-1 flex items-center justify-center">
@@ -1118,6 +1259,8 @@ Rules:
                 customPrompts={customPrompts}
                 onSavePrompt={saveCustomPrompt}
                 onResetPrompt={resetPrompt}
+                verifierModel={verifierModel}
+                onVerifierModelChange={saveVerifierModel}
               />
             )}
           </div>
@@ -1241,7 +1384,7 @@ Rules:
     // ============================================
     // SETTINGS PANEL
     // ============================================
-    function SettingsPanel({ apiKeys, onSaveKey, theme, onThemeChange, customPrompts, onSavePrompt, onResetPrompt }) {
+    function SettingsPanel({ apiKeys, onSaveKey, theme, onThemeChange, customPrompts, onSavePrompt, onResetPrompt, verifierModel, onVerifierModelChange }) {
       const [inputs, setInputs] = useState(apiKeys);
       const [saved, setSaved] = useState({});
       const [activeSection, setActiveSection] = useState('general'); // general, agents
@@ -1435,6 +1578,62 @@ Rules:
                   </div>
                 ))}
                 
+                {/* Verifier Model */}
+                <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+                  <h3 className="font-body text-lg pb-2 mb-4" style={{ color: 'var(--text-primary)' }}>Verifier Model</h3>
+                  <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+                    The verifier model handles structure validation and completion passes. Use a capable but cost-effective model 
+                    (e.g., Sonnet) while reserving expensive models (e.g., Opus) for primary generation.
+                  </p>
+                  
+                  <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <label className="block font-body text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
+                      Select Verifier Model
+                    </label>
+                    <select
+                      value={verifierModel}
+                      onChange={(e) => onVerifierModelChange(e.target.value)}
+                      className="w-full rounded px-3 py-2 font-body text-sm focus:outline-none"
+                      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                    >
+                      <optgroup label="Anthropic">
+                        <option value="claude-sonnet-4-5-20250929" disabled={!apiKeys.anthropic}>Claude Sonnet 4.5 {!apiKeys.anthropic ? '(no key)' : '— recommended'}</option>
+                        <option value="claude-haiku-4-5-20251001" disabled={!apiKeys.anthropic}>Claude Haiku 4.5 {!apiKeys.anthropic ? '(no key)' : '— fast & cheap'}</option>
+                        <option value="claude-opus-4-5-20251101" disabled={!apiKeys.anthropic}>Claude Opus 4.5 {!apiKeys.anthropic ? '(no key)' : ''}</option>
+                      </optgroup>
+                      <optgroup label="OpenAI">
+                        <option value="gpt-5-mini-2025-08-07" disabled={!apiKeys.openai}>GPT-5 Mini {!apiKeys.openai ? '(no key)' : '— fast & cheap'}</option>
+                        <option value="gpt-4.1-2025-04-14" disabled={!apiKeys.openai}>GPT-4.1 {!apiKeys.openai ? '(no key)' : ''}</option>
+                        <option value="gpt-5-2025-04-01" disabled={!apiKeys.openai}>GPT-5 {!apiKeys.openai ? '(no key)' : ''}</option>
+                        <option value="o3-2025-04-16" disabled={!apiKeys.openai}>o3 {!apiKeys.openai ? '(no key)' : ''}</option>
+                      </optgroup>
+                      <optgroup label="DeepSeek">
+                        <option value="deepseek-chat" disabled={!apiKeys.deepseek}>DeepSeek V3.2 {!apiKeys.deepseek ? '(no key)' : '— very cheap'}</option>
+                        <option value="deepseek-reasoner" disabled={!apiKeys.deepseek}>DeepSeek Reasoner {!apiKeys.deepseek ? '(no key)' : ''}</option>
+                      </optgroup>
+                      <optgroup label="Moonshot">
+                        <option value="k2-0730-turbo" disabled={!apiKeys.moonshot}>Kimi K2 Turbo {!apiKeys.moonshot ? '(no key)' : ''}</option>
+                      </optgroup>
+                    </select>
+                    
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Current:</span>
+                      <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                        {MODELS[verifierModel]?.name || verifierModel}
+                      </span>
+                      {!apiKeys[MODELS[verifierModel]?.provider] && (
+                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}>
+                          ⚠ No API key
+                        </span>
+                      )}
+                    </div>
+                    
+                    <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
+                      Used for: Structure verification, completion passes, quality checks
+                    </p>
+                  </div>
+                </div>
+                
                 <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
                   <h3 className="font-body text-lg mb-4" style={{ color: 'var(--text-primary)' }}>Data Management</h3>
                   <div className="flex gap-4">
@@ -1627,7 +1826,7 @@ Rules:
     // ============================================
     // CHAT AREA COMPONENT
     // ============================================
-    function ChatArea({ chat, onSend, isLoading, agent, hasValidKey }) {
+    function ChatArea({ chat, onSend, isLoading, agent, hasValidKey, verificationResult, onVerify, onComplete, verifierModel, apiKeys }) {
       const [input, setInput] = useState('');
       const messagesEndRef = useRef(null);
       
@@ -1641,6 +1840,14 @@ Rules:
         onSend(input);
         setInput('');
       };
+      
+      // Check if this is an Architect chat with assistant messages
+      const isArchitect = chat.agentId === 'architect';
+      const hasAssistantMessage = chat.messages.some(m => m.role === 'assistant' && !m.isError);
+      
+      // Check if verifier model has a valid key
+      const verifierProvider = MODELS[verifierModel]?.provider;
+      const hasVerifierKey = apiKeys[verifierProvider]?.length > 10;
       
       return (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -1693,6 +1900,71 @@ Rules:
             )}
             <div ref={messagesEndRef} />
           </div>
+          
+          {/* Architect Verification Panel */}
+          {isArchitect && hasAssistantMessage && !isLoading && (
+            <div className="px-6 py-3" style={{ backgroundColor: 'var(--bg-secondary)', borderTop: '1px solid var(--border-color)' }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={onVerify}
+                    className="text-xs font-body px-3 py-1.5 rounded transition-colors"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                  >
+                    🔍 Verify Structure
+                  </button>
+                  
+                  {verificationResult && (
+                    <div className="flex items-center gap-2">
+                      {verificationResult.isComplete ? (
+                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#10b981' }}>
+                          ✓ All structures present
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: 'rgba(234, 179, 8, 0.2)', color: '#eab308' }}>
+                            ⚠ Missing {verificationResult.missing.length} structure{verificationResult.missing.length > 1 ? 's' : ''}
+                          </span>
+                          <button
+                            onClick={onComplete}
+                            disabled={!hasVerifierKey}
+                            className="text-xs font-body px-3 py-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                            title={hasVerifierKey ? `Complete using ${MODELS[verifierModel]?.name}` : 'Set verifier model API key in Settings'}
+                          >
+                            Complete Missing →
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Show current verifier model */}
+                <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <span>Verifier:</span>
+                  <span className="px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                    {MODELS[verifierModel]?.name || verifierModel}
+                  </span>
+                  {!hasVerifierKey && (
+                    <span style={{ color: 'var(--accent-crimson)' }}>(no key)</span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Missing structures detail */}
+              {verificationResult && !verificationResult.isComplete && (
+                <div className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <span className="font-medium">Missing:</span>{' '}
+                  {verificationResult.missing.map((m, i) => (
+                    <span key={m.key}>
+                      {m.key.replace(/_/g, ' ')}{i < verificationResult.missing.length - 1 ? ', ' : ''}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Input */}
           <form onSubmit={handleSubmit} className="p-6" style={{ borderTop: '1px solid var(--border-color)' }}>
