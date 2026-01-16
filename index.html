@@ -146,6 +146,65 @@
         0 4px 12px rgba(92, 75, 55, 0.04),
         inset 0 0 80px rgba(92, 75, 55, 0.03);
     }
+    
+    /* Button feedback styles */
+    button {
+      transition: transform 0.1s ease, filter 0.1s ease, box-shadow 0.1s ease;
+      position: relative;
+      user-select: none;
+      cursor: pointer;
+    }
+    
+    button:active:not(:disabled) {
+      transform: scale(0.94) translateY(1px);
+      filter: brightness(0.85);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* Success flash animation */
+    @keyframes successFlash {
+      0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+      50% { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0.4); }
+      100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+    }
+    
+    @keyframes quickPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(0.92); }
+      100% { transform: scale(1); }
+    }
+    
+    .success-flash {
+      animation: successFlash 0.5s ease-out, quickPulse 0.15s ease-out;
+    }
+    
+    /* Hover states for all buttons */
+    button:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+    
+    /* Input focus states */
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-gold) !important;
+      box-shadow: 0 0 0 2px rgba(201, 162, 39, 0.2);
+    }
+    
+    /* Clickable list items / cards */
+    .clickable {
+      transition: all 0.1s ease;
+      cursor: pointer;
+    }
+    
+    .clickable:active {
+      transform: scale(0.97);
+      filter: brightness(0.92);
+    }
   </style>
   
   <!-- Extra font for sepia mode -->
@@ -194,7 +253,7 @@
       'gpt-4.1-2025-04-14': { provider: 'openai', name: 'GPT-4.1', tier: 'balanced' },
       'gpt-5-mini-2025-08-07': { provider: 'openai', name: 'GPT-5 Mini', tier: 'fast' },
       // Kimi/Moonshot
-      'kimi-k2-0905-preview': { provider: 'moonshot', name: 'Kimi K2 0905-preview', tier: 'balanced' },
+      'kimi-k2-turbo-preview': { provider: 'moonshot', name: 'Kimi K2 Turbo', tier: 'balanced' },
     };
 
     // ============================================
@@ -1141,7 +1200,7 @@ Rules:
       const providers = [
         { id: 'anthropic', name: 'Anthropic', color: '#c9a227', placeholder: 'sk-ant-...', description: 'Claude models (Opus, Sonnet, Haiku)' },
         { id: 'openai', name: 'OpenAI', color: '#10a37f', placeholder: 'sk-...', description: 'GPT-5, o3, GPT-4.1, GPT-5 Mini' },
-        { id: 'moonshot', name: 'Kimi (Moonshot)', color: '#6366f1', placeholder: 'sk-...', description: 'Kimi K2 0905-preview' },
+        { id: 'moonshot', name: 'Kimi (Moonshot)', color: '#6366f1', placeholder: 'sk-...', description: 'Kimi K2 Turbo' },
       ];
       
       // Agent descriptions for the editor
@@ -1586,9 +1645,23 @@ Rules:
       const [bibleContent, setBibleContent] = useState(storyBible);
       const [curveContent, setCurveContent] = useState(tensionCurve);
       const [activeTab, setActiveTab] = useState('bible');
+      const [bibleSaved, setBibleSaved] = useState(false);
+      const [curveSaved, setCurveSaved] = useState(false);
       
       useEffect(() => { setBibleContent(storyBible); }, [storyBible]);
       useEffect(() => { setCurveContent(tensionCurve); }, [tensionCurve]);
+      
+      const handleSaveBible = () => {
+        onSaveBible(bibleContent);
+        setBibleSaved(true);
+        setTimeout(() => setBibleSaved(false), 1500);
+      };
+      
+      const handleSaveCurve = () => {
+        onSaveCurve(curveContent);
+        setCurveSaved(true);
+        setTimeout(() => setCurveSaved(false), 1500);
+      };
       
       return (
         <div className="flex-1 flex flex-col">
@@ -1633,11 +1706,11 @@ Rules:
                   style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
                 <button
-                  onClick={() => onSaveBible(bibleContent)}
-                  className="mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                  onClick={handleSaveBible}
+                  className={`mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors ${bibleSaved ? 'success-flash' : ''}`}
                   style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                 >
-                  Save Story Bible
+                  {bibleSaved ? '✓ Saved' : 'Save Story Bible'}
                 </button>
               </div>
             )}
@@ -1655,11 +1728,11 @@ Rules:
                   style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
                 <button
-                  onClick={() => onSaveCurve(curveContent)}
-                  className="mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                  onClick={handleSaveCurve}
+                  className={`mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors ${curveSaved ? 'success-flash' : ''}`}
                   style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                 >
-                  Save Tension Curve
+                  {curveSaved ? '✓ Saved' : 'Save Tension Curve'}
                 </button>
               </div>
             )}
@@ -1676,6 +1749,7 @@ Rules:
       const [newChapterNum, setNewChapterNum] = useState('');
       const [editContent, setEditContent] = useState({ beats: '', draft: '', feedback: '' });
       const [activeTab, setActiveTab] = useState('beats');
+      const [saveFlash, setSaveFlash] = useState(false);
       
       const chapterNums = Object.keys(chapters).sort((a, b) => parseInt(a) - parseInt(b));
       
@@ -1773,11 +1847,15 @@ Rules:
                     style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                   />
                   <button
-                    onClick={() => onSaveChapter(selectedChapter, { [activeTab]: editContent[activeTab] })}
-                    className="mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors"
+                    onClick={() => {
+                      onSaveChapter(selectedChapter, { [activeTab]: editContent[activeTab] });
+                      setSaveFlash(true);
+                      setTimeout(() => setSaveFlash(false), 400);
+                    }}
+                    className={`mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors ${saveFlash ? 'success-flash' : ''}`}
                     style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                   >
-                    Save {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
+                    {saveFlash ? '✓ Saved' : `Save ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
                   </button>
                 </div>
               </>
@@ -1850,6 +1928,7 @@ Rules:
       const [data, setData] = useState([]);
       const [dragging, setDragging] = useState(null);
       const [totalChapters, setTotalChapters] = useState(20);
+      const [saveFlash, setSaveFlash] = useState(false);
       const svgRef = useRef(null);
       
       // Parse YAML on load
