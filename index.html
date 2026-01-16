@@ -8,6 +8,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -731,6 +732,7 @@ Rules:
                 {[
                   { id: 'chat', label: 'Chat', icon: '◇' },
                   { id: 'bible', label: 'Bible', icon: '◈' },
+                  { id: 'viz', label: 'Viz', icon: '📈' },
                   { id: 'chapters', label: 'Chapters', icon: '▤' },
                   { id: 'settings', label: 'Settings', icon: '⚙' },
                 ].map(tab => (
@@ -919,6 +921,15 @@ Rules:
             
             {view === 'bible' && (
               <StoryBibleEditor
+                storyBible={storyBible}
+                tensionCurve={tensionCurve}
+                onSaveBible={saveStoryBible}
+                onSaveCurve={saveTensionCurve}
+              />
+            )}
+            
+            {view === 'viz' && (
+              <VisualizationPanel
                 storyBible={storyBible}
                 tensionCurve={tensionCurve}
                 onSaveBible={saveStoryBible}
@@ -1500,6 +1511,819 @@ Rules:
               </div>
             )}
           </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // VISUALIZATION PANEL
+    // ============================================
+    function VisualizationPanel({ storyBible, tensionCurve, onSaveBible, onSaveCurve }) {
+      const [activeViz, setActiveViz] = useState('tension');
+      
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
+            <h2 className="font-display text-3xl mb-4" style={{ color: 'var(--text-primary)' }}>Visualize</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveViz('tension')}
+                className="px-4 py-2 text-sm font-body rounded transition-colors"
+                style={activeViz === 'tension' 
+                  ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                  : { color: 'var(--text-muted)' }
+                }
+              >
+                📈 Tension Curve
+              </button>
+              <button
+                onClick={() => setActiveViz('disclosure')}
+                className="px-4 py-2 text-sm font-body rounded transition-colors"
+                style={activeViz === 'disclosure' 
+                  ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                  : { color: 'var(--text-muted)' }
+                }
+              >
+                🔮 Disclosure Timeline
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex-1 p-6 overflow-auto">
+            {activeViz === 'tension' && (
+              <TensionCurveEditor
+                tensionCurve={tensionCurve}
+                onSave={onSaveCurve}
+              />
+            )}
+            {activeViz === 'disclosure' && (
+              <DisclosureTimeline
+                storyBible={storyBible}
+                onSave={onSaveBible}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // TENSION CURVE EDITOR
+    // ============================================
+    function TensionCurveEditor({ tensionCurve, onSave }) {
+      const [data, setData] = useState([]);
+      const [dragging, setDragging] = useState(null);
+      const [totalChapters, setTotalChapters] = useState(20);
+      const svgRef = useRef(null);
+      
+      // Parse YAML on load
+      useEffect(() => {
+        try {
+          const parsed = jsyaml.load(tensionCurve);
+          if (parsed?.chapters) {
+            const points = [];
+            // Handle both object and array formats
+            if (Array.isArray(parsed.chapters)) {
+              parsed.chapters.forEach(ch => {
+                points.push({
+                  chapter: ch.number || ch.chapter,
+                  tension: ch.target || ch.tension || 5,
+                  type: ch.type || '',
+                  end_on: ch.end_on || ''
+                });
+              });
+            } else {
+              Object.entries(parsed.chapters).forEach(([num, ch]) => {
+                points.push({
+                  chapter: parseInt(num),
+                  tension: ch.target || ch.tension || 5,
+                  type: ch.type || '',
+                  end_on: ch.end_on || ''
+                });
+              });
+            }
+            points.sort((a, b) => a.chapter - b.chapter);
+            setData(points);
+            if (points.length > 0) {
+              setTotalChapters(Math.max(20, Math.max(...points.map(p => p.chapter)) + 2));
+            }
+          }
+        } catch (e) {
+          console.log('Could not parse tension curve YAML');
+        }
+      }, [tensionCurve]);
+      
+      // SVG dimensions
+      const width = 800;
+      const height = 400;
+      const padding = { top: 40, right: 40, bottom: 80, left: 60 };
+      const chartWidth = width - padding.left - padding.right;
+      const chartHeight = height - padding.top - padding.bottom;
+      
+      // Scales
+      const xScale = (chapter) => padding.left + ((chapter - 1) / (totalChapters - 1)) * chartWidth;
+      const yScale = (tension) => padding.top + chartHeight - ((tension - 1) / 9) * chartHeight;
+      const xInverse = (px) => Math.round(((px - padding.left) / chartWidth) * (totalChapters - 1) + 1);
+      const yInverse = (py) => Math.round((1 - (py - padding.top) / chartHeight) * 9 + 1);
+      
+      // Generate smooth curve path
+      const generatePath = () => {
+        if (data.length < 2) return '';
+        const sorted = [...data].sort((a, b) => a.chapter - b.chapter);
+        
+        // Catmull-Rom to Bezier conversion for smooth curve
+        let path = `M ${xScale(sorted[0].chapter)} ${yScale(sorted[0].tension)}`;
+        
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const p0 = sorted[Math.max(0, i - 1)];
+          const p1 = sorted[i];
+          const p2 = sorted[i + 1];
+          const p3 = sorted[Math.min(sorted.length - 1, i + 2)];
+          
+          const cp1x = xScale(p1.chapter) + (xScale(p2.chapter) - xScale(p0.chapter)) / 6;
+          const cp1y = yScale(p1.tension) + (yScale(p2.tension) - yScale(p0.tension)) / 6;
+          const cp2x = xScale(p2.chapter) - (xScale(p3.chapter) - xScale(p1.chapter)) / 6;
+          const cp2y = yScale(p2.tension) - (yScale(p3.tension) - yScale(p1.tension)) / 6;
+          
+          path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${xScale(p2.chapter)} ${yScale(p2.tension)}`;
+        }
+        
+        return path;
+      };
+      
+      // Handle drag
+      const handleMouseMove = (e) => {
+        if (dragging === null || !svgRef.current) return;
+        
+        const rect = svgRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        const newTension = Math.max(1, Math.min(10, yInverse(y)));
+        
+        setData(prev => prev.map((p, i) => 
+          i === dragging ? { ...p, tension: newTension } : p
+        ));
+      };
+      
+      const handleMouseUp = () => {
+        if (dragging !== null) {
+          saveToYaml();
+        }
+        setDragging(null);
+      };
+      
+      // Add new point
+      const addPoint = (chapter) => {
+        if (data.some(p => p.chapter === chapter)) return;
+        const newData = [...data, { chapter, tension: 5, type: '', end_on: '' }];
+        newData.sort((a, b) => a.chapter - b.chapter);
+        setData(newData);
+      };
+      
+      // Remove point
+      const removePoint = (index) => {
+        setData(prev => prev.filter((_, i) => i !== index));
+      };
+      
+      // Save to YAML
+      const saveToYaml = () => {
+        const yaml = {
+          chapters: {}
+        };
+        data.forEach(p => {
+          yaml.chapters[p.chapter] = {
+            target: p.tension,
+            type: p.type || undefined,
+            end_on: p.end_on || undefined
+          };
+        });
+        onSave(jsyaml.dump(yaml));
+      };
+      
+      // Story phases
+      const phases = [
+        { start: 0, end: 0.1, label: 'Setup' },
+        { start: 0.1, end: 0.25, label: 'Debate' },
+        { start: 0.25, end: 0.5, label: 'Fun & Games' },
+        { start: 0.5, end: 0.75, label: 'Bad Guys Close In' },
+        { start: 0.75, end: 0.85, label: 'Dark Night' },
+        { start: 0.85, end: 1, label: 'Finale' },
+      ];
+      
+      return (
+        <div>
+          <div className="flex items-center gap-4 mb-4">
+            <label className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              Total Chapters:
+              <input
+                type="number"
+                value={totalChapters}
+                onChange={(e) => setTotalChapters(Math.max(5, parseInt(e.target.value) || 20))}
+                className="ml-2 w-16 px-2 py-1 rounded text-sm"
+                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+              />
+            </label>
+            <button
+              onClick={saveToYaml}
+              className="px-4 py-1 rounded text-sm font-body"
+              style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+            >
+              Save to YAML
+            </button>
+          </div>
+          
+          <div className="rounded-lg p-4 page-container" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+            <svg
+              ref={svgRef}
+              width={width}
+              height={height}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              style={{ cursor: dragging !== null ? 'grabbing' : 'default' }}
+            >
+              {/* Grid lines */}
+              {[1,2,3,4,5,6,7,8,9,10].map(t => (
+                <g key={t}>
+                  <line
+                    x1={padding.left}
+                    y1={yScale(t)}
+                    x2={width - padding.right}
+                    y2={yScale(t)}
+                    stroke="var(--border-color)"
+                    strokeDasharray={t === 5 ? "none" : "2,4"}
+                    strokeWidth={t === 5 ? 1.5 : 0.5}
+                  />
+                  <text
+                    x={padding.left - 10}
+                    y={yScale(t)}
+                    textAnchor="end"
+                    dominantBaseline="middle"
+                    fontSize="11"
+                    fill="var(--text-muted)"
+                  >
+                    {t}
+                  </text>
+                </g>
+              ))}
+              
+              {/* Phase backgrounds */}
+              {phases.map((phase, i) => (
+                <g key={i}>
+                  <rect
+                    x={padding.left + phase.start * chartWidth}
+                    y={height - padding.bottom + 20}
+                    width={(phase.end - phase.start) * chartWidth}
+                    height={24}
+                    fill={i % 2 === 0 ? 'var(--bg-tertiary)' : 'transparent'}
+                    rx={4}
+                  />
+                  <text
+                    x={padding.left + ((phase.start + phase.end) / 2) * chartWidth}
+                    y={height - padding.bottom + 36}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="var(--text-muted)"
+                  >
+                    {phase.label}
+                  </text>
+                </g>
+              ))}
+              
+              {/* X-axis chapter markers */}
+              {Array.from({ length: totalChapters }, (_, i) => i + 1).map(ch => (
+                <g key={ch}>
+                  <line
+                    x1={xScale(ch)}
+                    y1={height - padding.bottom}
+                    x2={xScale(ch)}
+                    y2={height - padding.bottom + 5}
+                    stroke="var(--text-muted)"
+                  />
+                  {(ch === 1 || ch % 5 === 0 || ch === totalChapters) && (
+                    <text
+                      x={xScale(ch)}
+                      y={height - padding.bottom + 16}
+                      textAnchor="middle"
+                      fontSize="10"
+                      fill="var(--text-muted)"
+                    >
+                      {ch}
+                    </text>
+                  )}
+                </g>
+              ))}
+              
+              {/* Clickable area to add points */}
+              <rect
+                x={padding.left}
+                y={padding.top}
+                width={chartWidth}
+                height={chartHeight}
+                fill="transparent"
+                onClick={(e) => {
+                  const rect = svgRef.current.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const chapter = xInverse(x);
+                  if (chapter >= 1 && chapter <= totalChapters) {
+                    addPoint(chapter);
+                  }
+                }}
+                style={{ cursor: 'crosshair' }}
+              />
+              
+              {/* Curve */}
+              <path
+                d={generatePath()}
+                fill="none"
+                stroke="var(--accent-gold)"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              
+              {/* Points */}
+              {data.map((point, i) => (
+                <g key={i}>
+                  <circle
+                    cx={xScale(point.chapter)}
+                    cy={yScale(point.tension)}
+                    r={dragging === i ? 12 : 10}
+                    fill="var(--accent-gold)"
+                    stroke="var(--bg-primary)"
+                    strokeWidth={3}
+                    style={{ cursor: 'grab' }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setDragging(i);
+                    }}
+                    onDoubleClick={() => removePoint(i)}
+                  />
+                  <text
+                    x={xScale(point.chapter)}
+                    y={yScale(point.tension) - 18}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fontWeight="600"
+                    fill="var(--text-primary)"
+                  >
+                    Ch {point.chapter}
+                  </text>
+                </g>
+              ))}
+              
+              {/* Labels */}
+              <text
+                x={width / 2}
+                y={20}
+                textAnchor="middle"
+                fontSize="14"
+                fontWeight="500"
+                fill="var(--text-primary)"
+              >
+                Tension Curve
+              </text>
+              <text
+                x={20}
+                y={height / 2}
+                textAnchor="middle"
+                fontSize="11"
+                fill="var(--text-muted)"
+                transform={`rotate(-90, 20, ${height / 2})`}
+              >
+                Tension (1-10)
+              </text>
+            </svg>
+          </div>
+          
+          <p className="mt-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Click to add points • Drag points to adjust tension • Double-click to remove
+          </p>
+          
+          {/* Point details */}
+          {data.length > 0 && (
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              {data.map((point, i) => (
+                <div key={i} className="p-3 rounded" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>
+                      Chapter {point.chapter}
+                    </span>
+                    <span className="text-sm px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}>
+                      Tension: {point.tension}
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={point.type}
+                    onChange={(e) => {
+                      const newData = [...data];
+                      newData[i].type = e.target.value;
+                      setData(newData);
+                    }}
+                    onBlur={saveToYaml}
+                    placeholder="Type (e.g., 'Midpoint', 'All is Lost')"
+                    className="w-full px-2 py-1 rounded text-xs mb-1"
+                    style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                  />
+                  <input
+                    type="text"
+                    value={point.end_on}
+                    onChange={(e) => {
+                      const newData = [...data];
+                      newData[i].end_on = e.target.value;
+                      setData(newData);
+                    }}
+                    onBlur={saveToYaml}
+                    placeholder="End on (e.g., 'Cliffhanger', 'Question')"
+                    className="w-full px-2 py-1 rounded text-xs"
+                    style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ============================================
+    // DISCLOSURE TIMELINE
+    // ============================================
+    function DisclosureTimeline({ storyBible, onSave }) {
+      const [facts, setFacts] = useState([]);
+      const [totalChapters, setTotalChapters] = useState(20);
+      const [dragging, setDragging] = useState(null);
+      const svgRef = useRef(null);
+      
+      // Parse story bible YAML
+      useEffect(() => {
+        try {
+          const parsed = jsyaml.load(storyBible);
+          if (parsed?.disclosure_schedule) {
+            const schedule = parsed.disclosure_schedule.map(item => ({
+              id: item.fact_id || item.id || 'unknown',
+              fact: item.fact || item.fact_id || 'Unknown fact',
+              hinted: Array.isArray(item.hinted_at) ? item.hinted_at : (item.hinted_at ? [item.hinted_at] : []),
+              suspected: item.reader_suspects || item.suspected_by_reader || item.reader_should_suspect || null,
+              confirmed: item.confirmed || item.confirmed_to_reader || null
+            }));
+            setFacts(schedule);
+            
+            // Calculate max chapter
+            let maxCh = 20;
+            schedule.forEach(f => {
+              if (f.confirmed) maxCh = Math.max(maxCh, f.confirmed + 2);
+              if (f.suspected) maxCh = Math.max(maxCh, f.suspected + 2);
+              f.hinted.forEach(h => { maxCh = Math.max(maxCh, h + 2); });
+            });
+            setTotalChapters(maxCh);
+          }
+        } catch (e) {
+          console.log('Could not parse story bible YAML');
+        }
+      }, [storyBible]);
+      
+      // SVG dimensions
+      const width = 800;
+      const trackHeight = 60;
+      const padding = { top: 60, right: 40, bottom: 40, left: 180 };
+      const height = padding.top + facts.length * trackHeight + padding.bottom;
+      const chartWidth = width - padding.left - padding.right;
+      
+      // Scales
+      const xScale = (chapter) => padding.left + ((chapter - 1) / (totalChapters - 1)) * chartWidth;
+      const xInverse = (px) => Math.round(((px - padding.left) / chartWidth) * (totalChapters - 1) + 1);
+      
+      // Handle drag
+      const handleMouseMove = (e) => {
+        if (!dragging || !svgRef.current) return;
+        
+        const rect = svgRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const newChapter = Math.max(1, Math.min(totalChapters, xInverse(x)));
+        
+        setFacts(prev => prev.map((f, fi) => {
+          if (fi !== dragging.factIndex) return f;
+          
+          if (dragging.type === 'hinted') {
+            const newHinted = [...f.hinted];
+            newHinted[dragging.hintIndex] = newChapter;
+            return { ...f, hinted: newHinted };
+          } else if (dragging.type === 'suspected') {
+            return { ...f, suspected: newChapter };
+          } else if (dragging.type === 'confirmed') {
+            return { ...f, confirmed: newChapter };
+          }
+          return f;
+        }));
+      };
+      
+      const handleMouseUp = () => {
+        if (dragging) {
+          saveToYaml();
+        }
+        setDragging(null);
+      };
+      
+      // Save to YAML
+      const saveToYaml = () => {
+        try {
+          const parsed = jsyaml.load(storyBible) || {};
+          parsed.disclosure_schedule = facts.map(f => ({
+            fact_id: f.id,
+            fact: f.fact,
+            hinted_at: f.hinted,
+            reader_suspects: f.suspected,
+            confirmed: f.confirmed
+          }));
+          onSave(jsyaml.dump(parsed));
+        } catch (e) {
+          console.error('Error saving disclosure timeline');
+        }
+      };
+      
+      // Add new fact
+      const addFact = () => {
+        setFacts(prev => [...prev, {
+          id: `fact_${Date.now()}`,
+          fact: 'New secret',
+          hinted: [],
+          suspected: null,
+          confirmed: null
+        }]);
+      };
+      
+      return (
+        <div>
+          <div className="flex items-center gap-4 mb-4">
+            <label className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              Total Chapters:
+              <input
+                type="number"
+                value={totalChapters}
+                onChange={(e) => setTotalChapters(Math.max(5, parseInt(e.target.value) || 20))}
+                className="ml-2 w-16 px-2 py-1 rounded text-sm"
+                style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+              />
+            </label>
+            <button
+              onClick={addFact}
+              className="px-4 py-1 rounded text-sm font-body"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+            >
+              + Add Fact
+            </button>
+            <button
+              onClick={saveToYaml}
+              className="px-4 py-1 rounded text-sm font-body"
+              style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+            >
+              Save to YAML
+            </button>
+          </div>
+          
+          <div className="rounded-lg p-4 overflow-x-auto" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+            <svg
+              ref={svgRef}
+              width={width}
+              height={Math.max(200, height)}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              {/* Chapter markers */}
+              {Array.from({ length: totalChapters }, (_, i) => i + 1).map(ch => (
+                <g key={ch}>
+                  <line
+                    x1={xScale(ch)}
+                    y1={padding.top - 20}
+                    x2={xScale(ch)}
+                    y2={height - padding.bottom}
+                    stroke="var(--border-color)"
+                    strokeDasharray="2,4"
+                    strokeWidth={0.5}
+                  />
+                  <text
+                    x={xScale(ch)}
+                    y={padding.top - 30}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="var(--text-muted)"
+                  >
+                    {ch}
+                  </text>
+                </g>
+              ))}
+              
+              {/* Legend */}
+              <g transform={`translate(${padding.left}, 15)`}>
+                <circle cx={0} cy={0} r={6} fill="none" stroke="var(--accent-gold)" strokeWidth={2} />
+                <text x={12} y={4} fontSize="10" fill="var(--text-muted)">Hinted</text>
+                
+                <circle cx={80} cy={0} r={6} fill="var(--accent-gold)" fillOpacity={0.5} stroke="var(--accent-gold)" strokeWidth={2} />
+                <text x={92} y={4} fontSize="10" fill="var(--text-muted)">Suspected</text>
+                
+                <circle cx={180} cy={0} r={6} fill="var(--accent-gold)" stroke="var(--accent-gold)" strokeWidth={2} />
+                <text x={192} y={4} fontSize="10" fill="var(--text-muted)">Confirmed</text>
+              </g>
+              
+              {/* Fact tracks */}
+              {facts.map((fact, fi) => {
+                const y = padding.top + fi * trackHeight + trackHeight / 2;
+                
+                return (
+                  <g key={fi}>
+                    {/* Track line */}
+                    <line
+                      x1={padding.left}
+                      y1={y}
+                      x2={width - padding.right}
+                      y2={y}
+                      stroke="var(--border-color)"
+                      strokeWidth={2}
+                    />
+                    
+                    {/* Fact label */}
+                    <text
+                      x={padding.left - 10}
+                      y={y}
+                      textAnchor="end"
+                      dominantBaseline="middle"
+                      fontSize="11"
+                      fill="var(--text-primary)"
+                    >
+                      {fact.fact.length > 20 ? fact.fact.slice(0, 20) + '...' : fact.fact}
+                    </text>
+                    
+                    {/* Connecting line from first hint to confirmed */}
+                    {fact.hinted.length > 0 && fact.confirmed && (
+                      <line
+                        x1={xScale(Math.min(...fact.hinted))}
+                        y1={y}
+                        x2={xScale(fact.confirmed)}
+                        y2={y}
+                        stroke="var(--accent-gold)"
+                        strokeWidth={3}
+                        strokeOpacity={0.3}
+                      />
+                    )}
+                    
+                    {/* Hinted markers (hollow circles) */}
+                    {fact.hinted.map((h, hi) => (
+                      <circle
+                        key={`h${hi}`}
+                        cx={xScale(h)}
+                        cy={y}
+                        r={8}
+                        fill="var(--bg-secondary)"
+                        stroke="var(--accent-gold)"
+                        strokeWidth={2}
+                        style={{ cursor: 'grab' }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setDragging({ factIndex: fi, type: 'hinted', hintIndex: hi });
+                        }}
+                      />
+                    ))}
+                    
+                    {/* Suspected marker (half-filled) */}
+                    {fact.suspected && (
+                      <g>
+                        <circle
+                          cx={xScale(fact.suspected)}
+                          cy={y}
+                          r={8}
+                          fill="var(--accent-gold)"
+                          fillOpacity={0.5}
+                          stroke="var(--accent-gold)"
+                          strokeWidth={2}
+                          style={{ cursor: 'grab' }}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setDragging({ factIndex: fi, type: 'suspected' });
+                          }}
+                        />
+                      </g>
+                    )}
+                    
+                    {/* Confirmed marker (filled) */}
+                    {fact.confirmed && (
+                      <circle
+                        cx={xScale(fact.confirmed)}
+                        cy={y}
+                        r={8}
+                        fill="var(--accent-gold)"
+                        stroke="var(--bg-primary)"
+                        strokeWidth={2}
+                        style={{ cursor: 'grab' }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setDragging({ factIndex: fi, type: 'confirmed' });
+                        }}
+                      />
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          
+          <p className="mt-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Drag markers to reschedule • ○ Hinted → ◐ Suspected → ● Confirmed
+          </p>
+          
+          {/* Fact editor cards */}
+          {facts.length > 0 && (
+            <div className="mt-6 space-y-4">
+              {facts.map((fact, i) => (
+                <div key={i} className="p-4 rounded" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        value={fact.fact}
+                        onChange={(e) => {
+                          const newFacts = [...facts];
+                          newFacts[i].fact = e.target.value;
+                          setFacts(newFacts);
+                        }}
+                        onBlur={saveToYaml}
+                        className="w-full px-2 py-1 rounded text-sm font-medium mb-2"
+                        style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      />
+                      <div className="flex gap-4 text-xs">
+                        <label style={{ color: 'var(--text-muted)' }}>
+                          Hinted at:
+                          <input
+                            type="text"
+                            value={fact.hinted.join(', ')}
+                            onChange={(e) => {
+                              const newFacts = [...facts];
+                              newFacts[i].hinted = e.target.value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+                              setFacts(newFacts);
+                            }}
+                            onBlur={saveToYaml}
+                            placeholder="3, 7, 11"
+                            className="ml-1 w-24 px-2 py-1 rounded"
+                            style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                          />
+                        </label>
+                        <label style={{ color: 'var(--text-muted)' }}>
+                          Suspected:
+                          <input
+                            type="number"
+                            value={fact.suspected || ''}
+                            onChange={(e) => {
+                              const newFacts = [...facts];
+                              newFacts[i].suspected = parseInt(e.target.value) || null;
+                              setFacts(newFacts);
+                            }}
+                            onBlur={saveToYaml}
+                            className="ml-1 w-16 px-2 py-1 rounded"
+                            style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                          />
+                        </label>
+                        <label style={{ color: 'var(--text-muted)' }}>
+                          Confirmed:
+                          <input
+                            type="number"
+                            value={fact.confirmed || ''}
+                            onChange={(e) => {
+                              const newFacts = [...facts];
+                              newFacts[i].confirmed = parseInt(e.target.value) || null;
+                              setFacts(newFacts);
+                            }}
+                            onBlur={saveToYaml}
+                            className="ml-1 w-16 px-2 py-1 rounded"
+                            style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setFacts(prev => prev.filter((_, fi) => fi !== i));
+                        setTimeout(saveToYaml, 0);
+                      }}
+                      className="text-xs px-2 py-1 rounded"
+                      style={{ color: 'var(--accent-crimson)' }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {facts.length === 0 && (
+            <div className="mt-8 text-center py-12" style={{ color: 'var(--text-muted)' }}>
+              <p className="mb-4">No disclosure schedule found in story bible.</p>
+              <p className="text-xs">Add a <code>disclosure_schedule</code> section to your story bible YAML, or click "+ Add Fact" above.</p>
+            </div>
+          )}
         </div>
       );
     }
