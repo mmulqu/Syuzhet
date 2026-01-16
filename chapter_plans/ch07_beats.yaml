@@ -1,0 +1,260 @@
+# CHAPTER 7 BEAT SHEET: "The Burning"
+
+chapter_number: 7
+chapter_title: "The Burning"
+
+# =============================================================================
+# TENSION & PACING TARGETS
+# =============================================================================
+
+target_tension: 6/10
+tension_type: "Ominous behavior, psychological unease"
+pacing: "Slow burn, atmospheric - deliberate and unsettling"
+
+# =============================================================================
+# INFORMATION ARCHITECTURE
+# =============================================================================
+
+information_state:
+  reader_learns:
+    - "Marcus has a photograph from childhood showing him with Elena"
+    - "Marcus is destroying evidence of some past connection"
+    - "Marcus is alone, vulnerable, not performing for anyone"
+    - "He has significant emotional weight around this photograph"
+
+  reader_suspects:
+    - "Marcus is hiding something about his relationship with Elena"
+    - "The photograph contains information that would be damaging if discovered"
+    - "Marcus may be more involved in Elena's death than appears"
+    - "There's a deeper connection between Marcus and Elena than 'friend'"
+
+  withheld:
+    - "That Elena and Marcus are half-siblings (not revealed until ch 17)"
+    - "That Marcus killed Elena (not confirmed until ch 18)"
+    - "That the photo shows them as children at a family event"
+    - "That Marcus embezzled money (not confirmed until ch 16-17)"
+    - "Marcus's explicit guilty thoughts about killing Elena"
+
+  dramatic_irony:
+    active: no
+    description: "Not yet - reader is only beginning to suspect Marcus. This chapter plants seeds."
+
+# =============================================================================
+# CHARACTER KNOWLEDGE CHANGES
+# =============================================================================
+
+character_knowledge_changes:
+  marcus:
+    learns: "Nothing new - he's acting on existing fear"
+    believes: "Destroying the photo protects his secret"
+    internal_conflict: "Guilt vs. self-preservation; attachment to memory vs. need to destroy evidence"
+
+  sarah:
+    learns: "Nothing (she's not present)"
+    status: "Unaware of this moment"
+
+# =============================================================================
+# SCENE BEATS
+# =============================================================================
+
+beats:
+  - beat_number: 1
+    description: "Marcus arrives home late at night, goes to hidden box in closet"
+
+    plot_function: "Marcus retrieves something he's kept hidden"
+
+    information_function:
+      reveals: "Marcus has kept something secret, stored carefully"
+      withholds: "What's in the box besides the photo"
+      hints_at: "This isn't impulsive - he's been protecting this secret"
+
+    character_function:
+      protagonist_arc: "Shows Marcus's paranoia increasing"
+      other_characters: "N/A"
+
+    pacing: "Slow, building atmospheric tension"
+    word_count_target: 400
+
+    end_beat_on:
+      type: "Revelation (to reader, not character)"
+      description: "Marcus pulls out a photograph, old and creased"
+
+  - beat_number: 2
+    description: "Marcus sits with the photograph, looking at it for a long time"
+
+    plot_function: "Marcus hesitates, remembering"
+
+    information_function:
+      reveals: "The photo shows two children; Marcus looks at it with complex emotion (guilt, sadness, regret)"
+      withholds: "What the full photo shows (we see 'two children' but not clear family context)"
+      hints_at: "These children are Marcus and Elena; their connection goes back to childhood"
+
+    character_function:
+      protagonist_arc: "Marcus is not simply evil - there's history, complexity, genuine emotion"
+      internal_state: "Grief, guilt, regret, but also self-justification"
+
+    pacing: "Very slow, introspective, weight of moment"
+    word_count_target: 600
+
+    end_beat_on:
+      type: "Decision moment"
+      description: "Marcus's hands tighten on the photo. He stands, walks to kitchen."
+
+  - beat_number: 3
+    description: "Marcus burns the photograph in the sink"
+
+    plot_function: "Marcus destroys evidence/memory"
+
+    information_function:
+      reveals: "Marcus is actively covering his tracks; this is calculated"
+      withholds: "Why this photo is dangerous specifically"
+      hints_at: "The photo could reveal the sibling connection if examined"
+
+    character_function:
+      protagonist_arc: "Marcus chooses self-preservation over sentiment"
+      physical_state: "Hands shake; he's forcing himself to do this"
+
+    pacing: "Medium - action finally happening"
+    word_count_target: 500
+
+    end_beat_on:
+      type: "Cliffhanger / Ominous image"
+      description: "The photograph curls and blackens. The two children in it disappear forever."
+
+# =============================================================================
+# CHAPTER OPENING
+# =============================================================================
+
+opening:
+  hook: "Marcus driving home at night, checking rearview mirror obsessively"
+  grounds_reader: "Marcus's POV, his car, night time, one week after Sarah interviewed him (ch 3)"
+  tone: "Paranoid, tense, slightly unhinged"
+
+  example_first_line: "Marcus checked the rearview mirror for the fifth time in as many blocks."
+
+# =============================================================================
+# CHAPTER CLOSING
+# =============================================================================
+
+closing:
+  type: "Ominous image + ambiguous internal thought"
+
+  purpose: "Leave reader unsettled; Marcus clearly hiding something but not clear what yet"
+
+  emotional_note: "Unease, foreboding, sense that Marcus is dangerous"
+
+  example_last_line: "The photograph curled and blackened in the flames. The two children in it—smiling, innocent, unaware of what they'd become—disappeared into ash. Marcus watched until there was nothing left but smoke."
+
+  loops_opened:
+    - "What was in the photograph that was so dangerous?"
+    - "Who was the other child? (Reader may guess Elena)"
+    - "What is Marcus hiding about his past with Elena?"
+    - "Is Marcus going to become more desperate/dangerous?"
+
+  loops_closed:
+    - "None - this chapter only opens questions"
+
+# =============================================================================
+# POV & NARRATIVE STYLE
+# =============================================================================
+
+pov:
+  character: "Marcus Webb"
+  distance: "Close third - access to his physical sensations and surface emotions, but NOT explicit confession thoughts"
+  access: "His nervousness, physical reactions, fragmented memories, but NOT 'I killed her' thoughts"
+
+narrative_constraints:
+  - "NEVER have Marcus think explicitly: 'I killed her' or 'I murdered Elena'"
+  - "NEVER have Marcus think about the murder method directly"
+  - "CAN show: physical symptoms of guilt (shaking, nausea), fragmented flashbacks (the railing, her scream), self-justification ('I had no choice')"
+  - "NEVER explain what the photo would reveal (sibling connection)"
+  - "Show his guilt through behavior, not confession"
+
+# =============================================================================
+# SCENE SETTINGS & ATMOSPHERE
+# =============================================================================
+
+primary_settings:
+  - location: "Marcus's apartment - specifically bedroom closet and kitchen"
+    atmosphere: "Claustrophobic, dark, slightly messy (he's not maintaining routines)"
+    sensory_details: "Sound of traffic outside; smell of old paper from the box; sound of match striking; smell of burning photograph; orange flame light on his face"
+
+# =============================================================================
+# DIALOGUE NOTES
+# =============================================================================
+
+key_dialogues:
+  - exchange_between: "Marcus talks to himself (minimal)"
+    purpose: "Show his mental state deteriorating slightly"
+    subtext: "He's trying to convince himself he's doing the right thing"
+    information_discipline: "He doesn't say what he's afraid of being discovered"
+
+    example_lines:
+      - "'It's better this way.'"
+      - "'No one can know.'"
+      - "'I had to.'" (ambiguous - had to burn it? or had to kill her?)"
+
+# =============================================================================
+# INFORMATION DISCIPLINE CHECKLIST
+# =============================================================================
+
+pre_writing_checklist:
+  - "✓ Confirmed: Marcus's sibling connection withheld until ch 17"
+  - "✓ Confirmed: Murder confession withheld until ch 18"
+  - "✓ Confirmed: Embezzlement withheld until ch 16-17"
+  - "✓ Photo is shown burning but contents not fully described"
+  - "✓ Marcus's guilt shown behaviorally, not through explicit thoughts"
+  - "✓ Chapter creates suspicion but not certainty"
+
+# =============================================================================
+# SPECIFIC WRITING CONSTRAINTS FOR THIS CHAPTER
+# =============================================================================
+
+do_not_write:
+  - "Marcus thinking: 'I pushed her from the lighthouse'"
+  - "Marcus remembering: 'When I shoved her over the railing...'"
+  - "Marcus thinking: 'The photo shows we're brother and sister'"
+  - "Describing the photo clearly enough to reveal family resemblance"
+  - "Marcus explaining why he's burning it (let action speak)"
+
+do_write:
+  - "Marcus's hands shaking as he holds the match"
+  - "His visceral physical reactions (nausea, tight chest, etc.)"
+  - "Fragmented sensory memories that don't add up to full confession (the smell of ocean, the sound of the wind, her voice saying his name)"
+  - "Ambiguous self-justifying thoughts: 'She didn't understand,' 'There was no other way,' 'It was her or me'"
+  - "The photo described as 'two children' or 'him and a girl' without identifying her"
+
+# =============================================================================
+# BREADCRUMBS TO PLANT
+# =============================================================================
+
+breadcrumbs:
+  - item: "Marcus knows detail about crime scene he shouldn't"
+    method: "Very subtle - maybe he thinks about 'the railing' when official reports said she fell from 'the observation deck' (railing not specifically mentioned publicly)"
+
+  - item: "Photo shows genetic similarity (same eyes)"
+    method: "Describe 'two children with the same unusual gray-green eyes' but don't flag it"
+
+  - item: "This is a family photo"
+    method: "Setting looks formal, like a family event, but don't state it"
+
+# =============================================================================
+# TENSION BEATS WITHIN CHAPTER
+# =============================================================================
+
+tension_micro_arc:
+  opening: 4/10  # Marcus driving, nervous
+  beat_1: 5/10   # Retrieving hidden box
+  beat_2: 6/10   # Looking at photo, hesitating (peak emotional intensity)
+  beat_3: 7/10   # Burning it (peak action intensity)
+  closing: 6/10  # Ominous aftermath
+
+# =============================================================================
+# POST-WRITING AUDIT NOTES
+# =============================================================================
+
+audit_results:
+  tension_score: "[To be filled by tension auditor]"
+  information_leakage: "[To be filled by information leakage checker]"
+  reader_simulation: "[To be filled by reader simulation critic]"
+  needed_revisions: []

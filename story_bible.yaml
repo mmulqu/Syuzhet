@@ -1,0 +1,395 @@
+# STORY BIBLE: Information Ledger
+# This document tracks OBJECTIVE REALITY and schedules INFORMATION DISCLOSURE
+#
+# Core Principle: Plot (what happens) ≠ Information disclosure (what reader learns when)
+#
+# This file is the source of truth for:
+# - What is objectively true in the story world
+# - When each fact should be revealed to the reader
+# - What each character knows/believes at any given time
+
+metadata:
+  title: "The Silent Witness"
+  genre: "Psychological Thriller / Mystery"
+  structure: "Three-act, 24 chapters"
+  pov: "Third person limited, rotating (Detective Sarah Chen, Marcus Webb)"
+
+# =============================================================================
+# OBJECTIVE REALITY
+# Everything that is TRUE in the story world, regardless of when it's revealed
+# =============================================================================
+
+objective_reality:
+  # Core mystery facts
+  - id: killer_identity
+    fact: "Marcus Webb killed Elena Reeves"
+    when_happened: "Three months before story opens (backstory)"
+    method: "Pushed her from the lighthouse observation deck"
+    motive_true: "Elena discovered Marcus embezzled $2M from their family trust"
+
+  - id: forged_letter
+    fact: "The suicide note found with Elena is forged by Marcus"
+    when_created: "Night of the murder"
+    how_forged: "Marcus used Elena's old journal pages and traced her handwriting"
+
+  - id: witness
+    fact: "Thomas Chen (Sarah's father) saw Marcus at the lighthouse that night"
+    when_happened: "Night of Elena's death"
+    why_silent: "Thomas has early-stage Alzheimer's; doubts his own memory"
+
+  - id: sibling_connection
+    fact: "Elena was Marcus's half-sister (same father, different mothers)"
+    established: "Birth records, family secret"
+    who_knows: ["Marcus", "Elena", "the father (deceased)"]
+
+  - id: embezzlement
+    fact: "Marcus stole $2M from family trust over 18 months"
+    method: "Created fake investment accounts, forged signatures"
+    status: "Money moved to offshore accounts"
+
+  - id: photo_meaning
+    fact: "The photo Marcus burns (ch 7) shows him and Elena as children at a family event"
+    significance: "Would reveal sibling relationship if examined closely"
+
+  - id: secondary_victim
+    fact: "Marcus's business partner David knows about the embezzlement"
+    status: "Marcus plans to kill him next (not executed in story)"
+    foreshadowing: "David receives threatening messages"
+
+  - id: red_herring_jake
+    fact: "Jake Torres (Elena's ex-boyfriend) is innocent but appears guilty"
+    false_evidence: "Was near lighthouse that night (photography hobby), had recent argument with Elena"
+    truth: "He was photographing the coastline, has timestamped photos as alibi"
+
+# =============================================================================
+# DISCLOSURE SCHEDULE
+# When each fact should be revealed/suspected/confirmed to the READER
+# =============================================================================
+
+disclosure_schedule:
+  - fact_id: killer_identity
+    fact: "Marcus killed Elena"
+
+    breadcrumbs:  # Subtle hints that build pattern
+      - chapter: 3
+        hint: "Marcus knows detail about crime scene he shouldn't (time of death)"
+        delivery: "Casual dialogue, easy to miss"
+      - chapter: 7
+        hint: "Marcus burns photograph when alone"
+        delivery: "Action without explanation"
+      - chapter: 11
+        hint: "Marcus's reaction to lighthouse is visceral, physical"
+        delivery: "Body language, internal POV leak"
+      - chapter: 15
+        hint: "Marcus visits grave at odd hour, says 'I had no choice'"
+        delivery: "Observed action, ambiguous dialogue"
+
+    reader_should_suspect: 12
+    reader_should_be_fairly_certain: 16
+    confirmed_to_reader: 18
+    confirmation_method: "Thomas Chen's memory clarifies in high-stress moment"
+
+    dramatic_irony_window: [16, 18]  # Reader knows, Sarah doesn't yet
+
+  - fact_id: forged_letter
+    fact: "The suicide note is forged"
+
+    breadcrumbs:
+      - chapter: 2
+        hint: "Handwriting expert notes 'unusual consistency' (traced writing is too perfect)"
+        delivery: "Technical report Sarah skims"
+      - chapter: 5
+        hint: "Letter uses phrase Elena never used ('find peace') per her therapist"
+        delivery: "Throwaway line in interview"
+      - chapter: 9
+        hint: "Paper stock is from a journal, not loose stationery"
+        delivery: "Physical evidence detail"
+
+    reader_should_suspect: 10
+    confirmed_to_reader: 14
+    confirmation_method: "Sarah matches letter paper to Elena's journal pages"
+
+  - fact_id: sibling_connection
+    fact: "Elena and Marcus are half-siblings"
+
+    breadcrumbs:
+      - chapter: 4
+        hint: "Marcus and Elena have same unusual eye color (genetic marker)"
+        delivery: "Physical description, not flagged as important"
+      - chapter: 8
+        hint: "Photo Marcus burns shows them as children together"
+        delivery: "Reader sees it burning, Marcus's POV doesn't explain"
+      - chapter: 12
+        hint: "Overheard conversation mentions 'family secret' and 'the father'"
+        delivery: "Partial dialogue"
+
+    reader_should_suspect: 13
+    confirmed_to_reader: 17
+    confirmation_method: "Sarah finds birth certificates during estate investigation"
+    twist: "Recontextualizes motive - not romantic jealousy but family money"
+
+  - fact_id: witness
+    fact: "Thomas Chen saw Marcus at the lighthouse"
+
+    breadcrumbs:
+      - chapter: 6
+        hint: "Thomas mutters about 'the man at the lighthouse' but trails off"
+        delivery: "Dismissed as confusion"
+      - chapter: 10
+        hint: "Thomas draws a lighthouse compulsively"
+        delivery: "Visual behavior, unexplained"
+      - chapter: 14
+        hint: "Thomas becomes agitated when Marcus visits Sarah's house"
+        delivery: "Physical reaction without words"
+
+    reader_should_suspect: 15
+    confirmed_to_reader: 18
+    confirmation_method: "Traumatic trigger causes Thomas to speak clearly"
+    emotional_weight: "Sarah must choose to believe her 'unreliable' father"
+
+  - fact_id: embezzlement
+    fact: "Marcus embezzled $2M from family trust"
+
+    breadcrumbs:
+      - chapter: 5
+        hint: "Elena's lawyer mentions 'concerns about the trust'"
+        delivery: "Vague reference in meeting"
+      - chapter: 9
+        hint: "Marcus has expensive new car, explains it away"
+        delivery: "Sarah notices, doesn't pursue"
+      - chapter: 13
+        hint: "Financial records show irregular transfers"
+        delivery: "Paper trail Sarah is following"
+
+    reader_should_suspect: 14
+    confirmed_to_reader: 17
+    confirmation_method: "Forensic accountant report"
+    function: "Provides concrete motive"
+
+  - fact_id: red_herring_jake
+    fact: "Jake Torres is innocent"
+
+    false_suspicion_peaks: [8, 11]
+    cleared: 13
+    method: "Timestamped photos provide alibi"
+    purpose: "Keeps reader guessing, prevents early certainty about Marcus"
+
+# =============================================================================
+# CHARACTER KNOWLEDGE STATES
+# What each character knows, believes (correctly or falsely), and when they learn truth
+# =============================================================================
+
+character_knowledge:
+  sarah_chen:
+    role: "Detective investigating Elena's death"
+    initial_belief: "Elena's death was suicide (official ruling)"
+
+    knows_from_start:
+      - "Elena is dead"
+      - "Suicide note was found"
+      - "No signs of struggle"
+
+    believes_falsely_at_start:
+      - "Suicide note is genuine"
+      - "Marcus is a grieving friend"
+      - "Her father's mentions of lighthouse are confusion"
+
+    learning_arc:
+      - chapter: 2
+        learns: "Handwriting analysis shows 'unusual consistency'"
+        impact: "First seed of doubt"
+
+      - chapter: 6
+        learns: "Jake was near lighthouse that night"
+        impact: "False lead, begins pursuing Jake"
+
+      - chapter: 10
+        learns: "Elena was having money concerns"
+        impact: "Questioning suicide motive"
+
+      - chapter: 13
+        learns: "Jake has alibi"
+        impact: "Shifts focus back to wider circle"
+
+      - chapter: 14
+        learns: "Suicide note is forged"
+        impact: "Confirms murder, reopens investigation"
+
+      - chapter: 17
+        learns: "Marcus and Elena were siblings, embezzlement motive"
+        impact: "Marcus becomes prime suspect"
+
+      - chapter: 18
+        learns: "Marcus was at lighthouse (via Thomas)"
+        impact: "Has proof, confronts Marcus"
+
+    internal_conflict: "Must choose to trust her father's deteriorating mind over evidence"
+
+  marcus_webb:
+    role: "Killer, Elena's half-brother"
+
+    knows_from_start:
+      - "He killed Elena"
+      - "He forged the suicide note"
+      - "He embezzled from the trust"
+      - "Elena is his half-sister"
+      - "Thomas might have seen him"
+
+    believes_falsely_at_start:
+      - "No one saw him at the lighthouse"
+      - "The suicide note is convincing"
+      - "He can maintain his composure indefinitely"
+
+    arc: "Mounting paranoia as investigation continues despite 'closed' case"
+
+    internal_reveals:  # Info shown to reader via his POV
+      - chapter: 7
+        internal_thought: "Shows guilt through actions (burning photo) but not explicit confession"
+      - chapter: 11
+        internal_thought: "Lighthouse visit triggers PTSD-like response"
+      - chapter: 15
+        internal_thought: "Considers fleeing, decides against it"
+
+    rules: "NEVER explicitly state 'I killed her' in his POV. Show guilt through behavior."
+
+  thomas_chen:
+    role: "Sarah's father, witness with Alzheimer's"
+
+    knows_buried:
+      - "Saw Marcus at lighthouse night of Elena's death"
+      - "Saw Marcus arguing with a woman"
+
+    condition: "Early Alzheimer's causes him to doubt his own memories"
+
+    arc:
+      - chapters: 1-10
+        state: "Fragmented memories, dismissed by others and self"
+      - chapters: 11-17
+        state: "Draws lighthouse compulsively, agitated by Marcus"
+      - chapter: 18
+        state: "Traumatic trigger causes moment of clarity"
+
+    function: "Embodies theme: what is truth when memory is unreliable?"
+
+  jake_torres:
+    role: "Red herring suspect, Elena's ex"
+
+    knows:
+      - "He was at lighthouse that night (photographing coastline)"
+      - "He had recent argument with Elena (she borrowed money, didn't return it)"
+      - "He has alibi (timestamped photos)"
+
+    function: "Plausible alternative suspect to delay Marcus revelation"
+
+# =============================================================================
+# WITHHELD INFORMATION RULES
+# Explicit constraints on what MUST NOT be revealed before scheduled chapter
+# =============================================================================
+
+withheld_until_scheduled:
+  - fact: "Marcus killed Elena"
+    no_explicit_confirmation_before: 18
+    allowed_before: "Hints, suspicious behavior, dramatic irony via his POV"
+    forbidden: "Character stating it, narrator confirming it, undeniable proof"
+
+  - fact: "Suicide note is forged"
+    no_explicit_confirmation_before: 14
+    allowed_before: "Expert noting 'unusual' traits, character hunches"
+    forbidden: "Definitive forensic proof, character certainty"
+
+  - fact: "Elena and Marcus are siblings"
+    no_explicit_confirmation_before: 17
+    allowed_before: "Visual similarities, odd familiarity, redacted records"
+    forbidden: "Birth certificates, character stating it, DNA results"
+
+  - fact: "Thomas is reliable witness"
+    no_explicit_confirmation_before: 18
+    allowed_before: "His agitation, drawings, fragmented warnings"
+    forbidden: "Clear testimony, corroborating evidence, Sarah believing him fully"
+
+# =============================================================================
+# DRAMATIC IRONY WINDOWS
+# Periods where reader knows more than protagonist (creates tension)
+# =============================================================================
+
+dramatic_irony:
+  - type: "Reader suspects Marcus before Sarah does"
+    active: [12, 17]
+    creates: "Frustration as Sarah pursues wrong leads, tension when Sarah gets close to Marcus"
+
+  - type: "Reader knows Thomas is right before Sarah does"
+    active: [15, 18]
+    creates: "Urgency for Sarah to listen to her father"
+
+  - type: "Reader knows suicide note is fake before official confirmation"
+    active: [10, 14]
+    creates: "Impatience with official investigation, satisfaction when Sarah confirms"
+
+# =============================================================================
+# READER SUSPICION TARGETS
+# What readers should be actively questioning at each phase
+# =============================================================================
+
+reader_questions:
+  chapters_1_5:
+    - "Was this really a suicide?"
+    - "Why would Elena kill herself?"
+    - "Is the suicide note genuine?"
+
+  chapters_6_10:
+    - "Did Jake kill her?"
+    - "What was Elena upset about?"
+    - "Why is Sarah's father obsessed with the lighthouse?"
+
+  chapters_11_15:
+    - "Did Marcus kill her?"
+    - "What is Marcus hiding?"
+    - "What did Thomas actually see?"
+
+  chapters_16_20:
+    - "How will Sarah prove it?"
+    - "Will Marcus get away with it?"
+    - "Will Sarah trust her father?"
+
+  chapters_21_24:
+    - "How will Marcus be caught?"
+    - "What will happen to Thomas?"
+    - "What was the full truth about the family?"
+
+# =============================================================================
+# THEME INTEGRATION
+# How information architecture serves thematic goals
+# =============================================================================
+
+themes:
+  - name: "Reliability of memory and perception"
+    served_by:
+      - "Thomas's Alzheimer's makes him 'unreliable' but he's right"
+      - "Sarah must choose evidence vs. intuition/family"
+      - "Marcus remembers killing but rationalizes it differently over time"
+
+  - name: "Family secrets and lies"
+    served_by:
+      - "Hidden sibling relationship"
+      - "Embezzlement within family trust"
+      - "Generational secrets affecting present"
+
+  - name: "Truth vs. appearance"
+    served_by:
+      - "Suicide appears as murder"
+      - "Marcus appears as friend, is killer"
+      - "Thomas appears confused, is witness"
+
+# =============================================================================
+# NOTES FOR GENERATORS
+# Rules to enforce during chapter generation
+# =============================================================================
+
+generator_constraints:
+  - "Never resolve ambiguity before the scheduled chapter"
+  - "When writing Marcus's POV, show guilt through behavior, never explicit confession"
+  - "When writing Sarah's POV, show her working through doubt, don't give her premature certainty"
+  - "Plant breadcrumbs as subtle details, not highlighted clues"
+  - "Keep Thomas's early mentions of lighthouse vague and easily dismissed"
+  - "Make Jake appear guilty during chapters 6-12 through circumstantial evidence"
+  - "End chapters on questions, not answers, unless it's a scheduled revelation beat"
