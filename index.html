@@ -1440,8 +1440,10 @@ Please output ONLY the missing YAML sections now.`;
               <VisualizationPanel
                 storyBible={storyBible}
                 tensionCurve={tensionCurve}
+                disclosures={disclosures}
                 onSaveBible={saveStoryBible}
                 onSaveCurve={saveTensionCurve}
+                onSaveDisclosures={saveDisclosures}
               />
             )}
             
@@ -3242,7 +3244,7 @@ reader_knowledge_progression:
     // ============================================
     // VISUALIZATION PANEL
     // ============================================
-    function VisualizationPanel({ storyBible, tensionCurve, onSaveBible, onSaveCurve }) {
+    function VisualizationPanel({ storyBible, tensionCurve, disclosures, onSaveBible, onSaveCurve, onSaveDisclosures }) {
       const [activeViz, setActiveViz] = useState('tension');
       
       return (
@@ -3282,8 +3284,8 @@ reader_knowledge_progression:
             )}
             {activeViz === 'disclosure' && (
               <DisclosureTimeline
-                storyBible={storyBible}
-                onSave={onSaveBible}
+                disclosures={disclosures}
+                onSave={onSaveDisclosures}
               />
             )}
           </div>
@@ -3676,39 +3678,54 @@ reader_knowledge_progression:
     // ============================================
     // DISCLOSURE TIMELINE
     // ============================================
-    function DisclosureTimeline({ storyBible, onSave }) {
+    function DisclosureTimeline({ disclosures, onSave }) {
       const [facts, setFacts] = useState([]);
       const [totalChapters, setTotalChapters] = useState(20);
       const [dragging, setDragging] = useState(null);
       const svgRef = useRef(null);
       
-      // Parse story bible YAML
+      // Parse disclosures YAML (new object-based format)
       useEffect(() => {
         try {
-          const parsed = jsyaml.load(storyBible);
+          const parsed = jsyaml.load(disclosures);
           if (parsed?.disclosure_schedule) {
-            const schedule = parsed.disclosure_schedule.map(item => ({
-              id: item.fact_id || item.id || 'unknown',
-              fact: item.fact || item.fact_id || 'Unknown fact',
-              hinted: Array.isArray(item.hinted_at) ? item.hinted_at : (item.hinted_at ? [item.hinted_at] : []),
-              suspected: item.reader_suspects || item.suspected_by_reader || item.reader_should_suspect || null,
-              confirmed: item.confirmed || item.confirmed_to_reader || null
-            }));
+            // Handle both object format { fact_id: {...} } and array format [{ fact_id, ... }]
+            let schedule;
+            if (Array.isArray(parsed.disclosure_schedule)) {
+              // Legacy array format
+              schedule = parsed.disclosure_schedule.map(item => ({
+                id: item.fact_id || item.id || 'unknown',
+                fact: item.description || item.fact || item.fact_id || 'Unknown fact',
+                hinted: Array.isArray(item.hinted_at) ? item.hinted_at : (item.hinted_at ? [item.hinted_at] : []),
+                suspected: item.suspected_by_reader || item.reader_suspects || null,
+                confirmed: item.confirmed || null
+              }));
+            } else {
+              // New object format: { fact_id: { description, hinted_at, ... } }
+              schedule = Object.entries(parsed.disclosure_schedule).map(([id, item]) => ({
+                id,
+                fact: item.description || id.replace(/_/g, ' '),
+                hinted: Array.isArray(item.hinted_at) ? item.hinted_at.filter(n => typeof n === 'number') : [],
+                suspected: typeof item.suspected_by_reader === 'number' ? item.suspected_by_reader : null,
+                confirmed: typeof item.confirmed === 'number' ? item.confirmed : null,
+                notes: item.notes || null
+              }));
+            }
             setFacts(schedule);
             
             // Calculate max chapter
-            let maxCh = 20;
+            let maxCh = 15;
             schedule.forEach(f => {
-              if (f.confirmed) maxCh = Math.max(maxCh, f.confirmed + 2);
-              if (f.suspected) maxCh = Math.max(maxCh, f.suspected + 2);
-              f.hinted.forEach(h => { maxCh = Math.max(maxCh, h + 2); });
+              if (f.confirmed && typeof f.confirmed === 'number') maxCh = Math.max(maxCh, f.confirmed + 2);
+              if (f.suspected && typeof f.suspected === 'number') maxCh = Math.max(maxCh, f.suspected + 2);
+              f.hinted.forEach(h => { if (typeof h === 'number') maxCh = Math.max(maxCh, h + 2); });
             });
             setTotalChapters(maxCh);
           }
         } catch (e) {
-          console.log('Could not parse story bible YAML');
+          console.log('Could not parse disclosures YAML:', e);
         }
-      }, [storyBible]);
+      }, [disclosures]);
       
       // SVG dimensions
       const width = 800;
@@ -3752,27 +3769,34 @@ reader_knowledge_progression:
         setDragging(null);
       };
       
-      // Save to YAML
+      // Save to YAML (preserving new object format)
       const saveToYaml = () => {
         try {
-          const parsed = jsyaml.load(storyBible) || {};
-          parsed.disclosure_schedule = facts.map(f => ({
-            fact_id: f.id,
-            fact: f.fact,
-            hinted_at: f.hinted,
-            reader_suspects: f.suspected,
-            confirmed: f.confirmed
-          }));
-          onSave(jsyaml.dump(parsed));
+          const parsed = jsyaml.load(disclosures) || {};
+          
+          // Build disclosure_schedule as object
+          const scheduleObj = {};
+          facts.forEach(f => {
+            scheduleObj[f.id] = {
+              description: f.fact,
+              hinted_at: f.hinted,
+              suspected_by_reader: f.suspected,
+              confirmed: f.confirmed
+            };
+            if (f.notes) scheduleObj[f.id].notes = f.notes;
+          });
+          parsed.disclosure_schedule = scheduleObj;
+          
+          onSave(jsyaml.dump(parsed, { lineWidth: -1 }));
         } catch (e) {
-          console.error('Error saving disclosure timeline');
+          console.error('Error saving disclosure timeline:', e);
         }
       };
       
       // Add new fact
       const addFact = () => {
         setFacts(prev => [...prev, {
-          id: `fact_${Date.now()}`,
+          id: `new_secret_${Date.now()}`,
           fact: 'New secret',
           hinted: [],
           suspected: null,
