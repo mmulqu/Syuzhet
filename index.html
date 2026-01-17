@@ -688,6 +688,143 @@ Please output ONLY the missing YAML sections now.`;
     }
 
     // ============================================
+    // GITHUB API UTILITIES
+    // ============================================
+    
+    const GitHubAPI = {
+      // Parse repo URL to get owner and repo name
+      parseRepoUrl(url) {
+        // Handle various formats: 
+        // https://github.com/owner/repo
+        // https://github.com/owner/repo.git
+        // git@github.com:owner/repo.git
+        // owner/repo
+        const patterns = [
+          /github\.com[/:]([\w-]+)\/([\w-]+?)(?:\.git)?$/,
+          /^([\w-]+)\/([\w-]+)$/
+        ];
+        for (const pattern of patterns) {
+          const match = url.match(pattern);
+          if (match) return { owner: match[1], repo: match[2] };
+        }
+        return null;
+      },
+      
+      // Fetch repository tree (file structure)
+      async getRepoTree(token, owner, repo, branch = 'main') {
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+          { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+        );
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.message || `GitHub API error: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.tree.filter(item => item.type === 'blob'); // Only files
+      },
+      
+      // Fetch file content
+      async getFileContent(token, owner, repo, path, branch = 'main') {
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+          { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+        );
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.message || `GitHub API error: ${response.status}`);
+        }
+        const data = await response.json();
+        // Decode base64 content
+        const content = atob(data.content.replace(/\n/g, ''));
+        return { content, sha: data.sha };
+      },
+      
+      // Check if branch exists
+      async branchExists(token, owner, repo, branch) {
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/branches/${branch}`,
+          { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+        );
+        return response.ok;
+      },
+      
+      // Create branch from another branch
+      async createBranch(token, owner, repo, newBranch, fromBranch = 'main') {
+        // Get SHA of source branch
+        const refResponse = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${fromBranch}`,
+          { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+        );
+        if (!refResponse.ok) throw new Error(`Could not find branch: ${fromBranch}`);
+        const refData = await refResponse.json();
+        
+        // Create new branch
+        const createResponse = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/git/refs`,
+          {
+            method: 'POST',
+            headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref: `refs/heads/${newBranch}`, sha: refData.object.sha })
+          }
+        );
+        if (!createResponse.ok) {
+          const err = await createResponse.json().catch(() => ({}));
+          throw new Error(err.message || 'Failed to create branch');
+        }
+        return true;
+      },
+      
+      // Get current file SHA (needed for updates)
+      async getFileSHA(token, owner, repo, path, branch) {
+        try {
+          const response = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+            { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            return data.sha;
+          }
+        } catch (e) {}
+        return null;
+      },
+      
+      // Create or update file
+      async createOrUpdateFile(token, owner, repo, path, content, message, branch, sha = null) {
+        const body = {
+          message,
+          content: btoa(unescape(encodeURIComponent(content))), // Handle UTF-8
+          branch
+        };
+        if (sha) body.sha = sha; // Required for updates
+        
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/contents/${path}`,
+          {
+            method: 'PUT',
+            headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          }
+        );
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.message || 'Failed to update file');
+        }
+        const data = await response.json();
+        return data.content.sha;
+      },
+      
+      // Check if file changed on remote (conflict detection)
+      async checkForConflicts(token, owner, repo, path, localSHA, branch) {
+        const remoteSHA = await this.getFileSHA(token, owner, repo, path, branch);
+        if (!remoteSHA) return { conflict: false, isNew: true };
+        if (remoteSHA !== localSHA) return { conflict: true, remoteSHA };
+        return { conflict: false };
+      }
+    };
+
+    // ============================================
     // MAIN APP
     // ============================================
     function App() {
@@ -711,12 +848,25 @@ Please output ONLY the missing YAML sections now.`;
       const [tensionCurve, setTensionCurve] = useState('');
       const [chapters, setChapters] = useState({});
       const [customPrompts, setCustomPrompts] = useState({});
-      const [view, setView] = useState('chat'); // chat, bible, chapters, settings
+      const [view, setView] = useState('chat'); // chat, bible, chapters, settings, github
       const [isLoading, setIsLoading] = useState(false);
       
       // Verification state (for Architect)
       const [verificationResult, setVerificationResult] = useState(null);
       const [verifierModel, setVerifierModel] = useState('claude-sonnet-4-5-20250929'); // model for verification/completion passes
+      
+      // GitHub state
+      const [githubConfig, setGithubConfig] = useState({
+        token: '',
+        owner: '',
+        repo: '',
+        branch: 'main',
+        fileMapping: {},    // { 'path/to/file.md': { type: 'chapter', chapterNum: 1 } }
+        fileSHAs: {},       // { 'path/to/file.md': 'sha...' } for updates
+        lastSync: null
+      });
+      const [referenceLibrary, setReferenceLibrary] = useState({});  // { id: { label, content, path } }
+      const [githubModal, setGithubModal] = useState(null);  // null, 'import', 'push'
 
       // Apply theme to document
       useEffect(() => {
@@ -763,6 +913,12 @@ Please output ONLY the missing YAML sections now.`;
         
         const savedPrompts = Storage.get('custom_prompts') || {};
         setCustomPrompts(savedPrompts);
+        
+        const savedGithub = Storage.get('github_config');
+        if (savedGithub) setGithubConfig(savedGithub);
+        
+        const savedRefs = Storage.get('reference_library') || {};
+        setReferenceLibrary(savedRefs);
       }, []);
 
       // Get current provider
@@ -775,6 +931,18 @@ Please output ONLY the missing YAML sections now.`;
         const updated = { ...apiKeys, [provider]: key };
         setApiKeys(updated);
         Storage.set('api_keys', updated);
+      };
+      
+      // Save GitHub config
+      const saveGithubConfig = (config) => {
+        setGithubConfig(config);
+        Storage.set('github_config', config);
+      };
+      
+      // Save reference library
+      const saveReferenceLibrary = (refs) => {
+        setReferenceLibrary(refs);
+        Storage.set('reference_library', refs);
       };
 
       // Save selected model
@@ -1022,6 +1190,7 @@ Please output ONLY the missing YAML sections now.`;
                   { id: 'bible', label: 'Bible', icon: '◈' },
                   { id: 'viz', label: 'Viz', icon: '📈' },
                   { id: 'chapters', label: 'Chapters', icon: '▤' },
+                  { id: 'reference', label: 'Refs', icon: '📚' },
                   { id: 'stats', label: 'Stats', icon: '✎' },
                   { id: 'settings', label: 'Settings', icon: '⚙' },
                 ].map(tab => (
@@ -1039,6 +1208,30 @@ Please output ONLY the missing YAML sections now.`;
                   </button>
                 ))}
               </div>
+              
+              {/* GitHub Quick Actions */}
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => setGithubModal('import')}
+                  className="flex-1 py-1.5 text-xs font-body rounded transition-colors"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                >
+                  {githubConfig.repo ? '📥 Sync' : '📥 Import'}
+                </button>
+                <button
+                  onClick={() => setGithubModal('push')}
+                  disabled={!githubConfig.repo}
+                  className="flex-1 py-1.5 text-xs font-body rounded transition-colors disabled:opacity-40"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                >
+                  📤 Push
+                </button>
+              </div>
+              {githubConfig.repo && (
+                <p className="text-xs mt-2 truncate" style={{ color: 'var(--text-muted)' }}>
+                  {githubConfig.owner}/{githubConfig.repo}
+                </p>
+              )}
             </div>
             
             {/* Model selector */}
@@ -1263,6 +1456,697 @@ Please output ONLY the missing YAML sections now.`;
                 onVerifierModelChange={saveVerifierModel}
               />
             )}
+            
+            {view === 'reference' && (
+              <ReferenceLibrary
+                references={referenceLibrary}
+                onDelete={(id) => {
+                  const { [id]: removed, ...rest } = referenceLibrary;
+                  saveReferenceLibrary(rest);
+                }}
+              />
+            )}
+          </div>
+        </div>
+        
+        {/* GitHub Import Modal */}
+        {githubModal === 'import' && (
+          <GitHubImportModal
+            config={githubConfig}
+            chapters={chapters}
+            onImport={(newConfig, newChapters, newRefs) => {
+              saveGithubConfig(newConfig);
+              Object.entries(newChapters).forEach(([num, ch]) => saveChapter(num, ch));
+              saveReferenceLibrary({ ...referenceLibrary, ...newRefs });
+            }}
+            onClose={() => setGithubModal(null)}
+          />
+        )}
+        
+        {/* GitHub Push Modal */}
+        {githubModal === 'push' && (
+          <GitHubPushModal
+            config={githubConfig}
+            chapters={chapters}
+            onPush={(updatedConfig) => saveGithubConfig(updatedConfig)}
+            onClose={() => setGithubModal(null)}
+          />
+        )}
+      );
+    }
+
+    // ============================================
+    // REFERENCE LIBRARY
+    // ============================================
+    function ReferenceLibrary({ references, onDelete }) {
+      const [selected, setSelected] = useState(null);
+      const refIds = Object.keys(references);
+      
+      return (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar */}
+          <div className="w-64 overflow-y-auto" style={{ borderRight: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
+            <div className="p-4">
+              <h3 className="font-body text-sm uppercase tracking-wider mb-4" style={{ color: 'var(--text-muted)' }}>
+                Reference Files
+              </h3>
+              {refIds.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  No reference files imported. Use the Import button to pull files from GitHub.
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {refIds.map(id => (
+                    <button
+                      key={id}
+                      onClick={() => setSelected(id)}
+                      className="w-full text-left px-3 py-2 rounded text-sm transition-colors"
+                      style={{
+                        backgroundColor: selected === id ? 'rgba(201,162,39,0.2)' : 'transparent',
+                        color: selected === id ? 'var(--accent-gold)' : 'var(--text-primary)'
+                      }}
+                    >
+                      <div className="font-medium truncate">{references[id].label}</div>
+                      <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{references[id].path}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Content */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {selected && references[selected] ? (
+              <>
+                <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <div>
+                    <h2 className="font-display text-xl" style={{ color: 'var(--text-primary)' }}>{references[selected].label}</h2>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{references[selected].path}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete "${references[selected].label}" from reference library?`)) {
+                        onDelete(selected);
+                        setSelected(null);
+                      }
+                    }}
+                    className="text-xs px-3 py-1.5 rounded"
+                    style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6">
+                  <pre className="font-mono text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>
+                    {references[selected].content}
+                  </pre>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <p style={{ color: 'var(--text-muted)' }}>Select a reference file to view</p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // GITHUB IMPORT MODAL
+    // ============================================
+    function GitHubImportModal({ config, chapters, onImport, onClose }) {
+      const [step, setStep] = useState(config.repo ? 'files' : 'connect'); // connect, files, importing
+      const [token, setToken] = useState(config.token || '');
+      const [repoUrl, setRepoUrl] = useState(config.repo ? `${config.owner}/${config.repo}` : '');
+      const [branch, setBranch] = useState(config.branch || 'main');
+      const [error, setError] = useState('');
+      const [loading, setLoading] = useState(false);
+      
+      const [repoTree, setRepoTree] = useState([]);
+      const [fileMapping, setFileMapping] = useState(config.fileMapping || {});
+      const [importStatus, setImportStatus] = useState({});
+      
+      // Connect to repo
+      const handleConnect = async () => {
+        setError('');
+        const parsed = GitHubAPI.parseRepoUrl(repoUrl);
+        if (!parsed) {
+          setError('Invalid repo URL. Use format: owner/repo or https://github.com/owner/repo');
+          return;
+        }
+        
+        setLoading(true);
+        try {
+          const tree = await GitHubAPI.getRepoTree(token, parsed.owner, parsed.repo, branch);
+          // Filter to just text files we care about
+          const textFiles = tree.filter(f => 
+            /\.(md|txt|yaml|yml|json)$/i.test(f.path) && !f.path.startsWith('.')
+          );
+          setRepoTree(textFiles);
+          setStep('files');
+        } catch (err) {
+          setError(err.message);
+        }
+        setLoading(false);
+      };
+      
+      // Update file mapping
+      const setMapping = (path, type, chapterNum = null) => {
+        if (type === 'ignore') {
+          const { [path]: removed, ...rest } = fileMapping;
+          setFileMapping(rest);
+        } else {
+          setFileMapping(prev => ({
+            ...prev,
+            [path]: { type, ...(chapterNum !== null && { chapterNum }) }
+          }));
+        }
+      };
+      
+      // Get next available chapter number
+      const getNextChapterNum = () => {
+        const used = new Set([
+          ...Object.keys(chapters).map(n => parseInt(n)),
+          ...Object.values(fileMapping).filter(m => m.type === 'chapter').map(m => m.chapterNum)
+        ]);
+        let n = 1;
+        while (used.has(n)) n++;
+        return n;
+      };
+      
+      // Perform import
+      const handleImport = async () => {
+        const parsed = GitHubAPI.parseRepoUrl(repoUrl);
+        if (!parsed) return;
+        
+        setStep('importing');
+        setImportStatus({});
+        
+        const newChapters = {};
+        const newRefs = {};
+        const newSHAs = {};
+        
+        for (const [path, mapping] of Object.entries(fileMapping)) {
+          try {
+            setImportStatus(prev => ({ ...prev, [path]: 'loading' }));
+            const { content, sha } = await GitHubAPI.getFileContent(token, parsed.owner, parsed.repo, path, branch);
+            newSHAs[path] = sha;
+            
+            if (mapping.type === 'chapter') {
+              newChapters[mapping.chapterNum] = {
+                content,
+                title: path.split('/').pop().replace(/\.[^.]+$/, ''),
+                beats: '',
+                feedback: ''
+              };
+            } else if (mapping.type === 'reference') {
+              const id = path.replace(/[^a-zA-Z0-9]/g, '_');
+              newRefs[id] = {
+                label: path.split('/').pop().replace(/\.[^.]+$/, ''),
+                content,
+                path
+              };
+            }
+            
+            setImportStatus(prev => ({ ...prev, [path]: 'done' }));
+          } catch (err) {
+            setImportStatus(prev => ({ ...prev, [path]: 'error: ' + err.message }));
+          }
+        }
+        
+        // Create new config
+        const newConfig = {
+          token,
+          owner: parsed.owner,
+          repo: parsed.repo,
+          branch,
+          fileMapping,
+          fileSHAs: newSHAs,
+          lastSync: Date.now()
+        };
+        
+        onImport(newConfig, newChapters, newRefs);
+        
+        // Wait a moment then close
+        setTimeout(() => onClose(), 1500);
+      };
+      
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}>
+          <div className="w-full max-w-3xl max-h-[90vh] rounded-lg overflow-hidden flex flex-col" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}>
+            {/* Header */}
+            <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <h2 className="font-display text-2xl" style={{ color: 'var(--text-primary)' }}>
+                📥 Import from GitHub
+              </h2>
+              <button onClick={onClose} className="text-2xl" style={{ color: 'var(--text-muted)' }}>×</button>
+            </div>
+            
+            {/* Step indicator */}
+            <div className="px-4 py-2 flex gap-4 text-xs" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+              <span style={{ color: step === 'connect' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>1. Connect</span>
+              <span>→</span>
+              <span style={{ color: step === 'files' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>2. Map Files</span>
+              <span>→</span>
+              <span style={{ color: step === 'importing' ? 'var(--accent-gold)' : 'var(--text-muted)' }}>3. Import</span>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {step === 'connect' && (
+                <div className="space-y-4 max-w-md">
+                  <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <p className="text-sm mb-4" style={{ color: 'var(--text-primary)' }}>
+                      <strong>How this works:</strong>
+                    </p>
+                    <ol className="text-sm space-y-2" style={{ color: 'var(--text-muted)' }}>
+                      <li>1. Enter your GitHub token and repository</li>
+                      <li>2. You'll manually assign each file to a chapter or reference</li>
+                      <li>3. Chapters become editable; references are read-only</li>
+                      <li>4. When you push, changes go to the <code className="px-1 rounded" style={{ backgroundColor: 'var(--bg-tertiary)' }}>syuzhet</code> branch</li>
+                    </ol>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm mb-2" style={{ color: 'var(--text-primary)' }}>GitHub Personal Access Token</label>
+                    <input
+                      type="password"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder="ghp_xxxxxxxxxxxx"
+                      className="w-full rounded px-3 py-2 font-mono text-sm"
+                      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                    />
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                      Needs <code>repo</code> scope. Create at GitHub → Settings → Developer settings → Personal access tokens
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm mb-2" style={{ color: 'var(--text-primary)' }}>Repository</label>
+                    <input
+                      type="text"
+                      value={repoUrl}
+                      onChange={(e) => setRepoUrl(e.target.value)}
+                      placeholder="owner/repo or https://github.com/owner/repo"
+                      className="w-full rounded px-3 py-2 font-mono text-sm"
+                      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm mb-2" style={{ color: 'var(--text-primary)' }}>Branch</label>
+                    <input
+                      type="text"
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      placeholder="main"
+                      className="w-full rounded px-3 py-2 font-mono text-sm"
+                      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  
+                  {error && (
+                    <div className="p-3 rounded text-sm" style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}>
+                      {error}
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={handleConnect}
+                    disabled={!token || !repoUrl || loading}
+                    className="w-full py-3 rounded font-body font-medium disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                  >
+                    {loading ? 'Connecting...' : 'Connect & Browse Files'}
+                  </button>
+                </div>
+              )}
+              
+              {step === 'files' && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <strong>Assign each file</strong> to a Chapter (editable) or Reference (read-only). 
+                    Unassigned files will be ignored.
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {repoTree.map(file => {
+                      const mapping = fileMapping[file.path];
+                      return (
+                        <div key={file.path} className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-mono text-sm truncate" style={{ color: 'var(--text-primary)' }}>{file.path}</div>
+                            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{(file.size / 1024).toFixed(1)} KB</div>
+                          </div>
+                          
+                          <select
+                            value={mapping?.type || 'ignore'}
+                            onChange={(e) => {
+                              const type = e.target.value;
+                              if (type === 'chapter') {
+                                setMapping(file.path, 'chapter', getNextChapterNum());
+                              } else if (type === 'reference') {
+                                setMapping(file.path, 'reference');
+                              } else {
+                                setMapping(file.path, 'ignore');
+                              }
+                            }}
+                            className="rounded px-2 py-1 text-sm"
+                            style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                          >
+                            <option value="ignore">— Ignore —</option>
+                            <option value="chapter">Chapter</option>
+                            <option value="reference">Reference</option>
+                          </select>
+                          
+                          {mapping?.type === 'chapter' && (
+                            <input
+                              type="number"
+                              min="1"
+                              value={mapping.chapterNum}
+                              onChange={(e) => setMapping(file.path, 'chapter', parseInt(e.target.value) || 1)}
+                              className="w-16 rounded px-2 py-1 text-sm text-center"
+                              style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={() => setStep('connect')}
+                      className="px-6 py-2 rounded font-body"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      onClick={handleImport}
+                      disabled={Object.keys(fileMapping).length === 0}
+                      className="flex-1 py-2 rounded font-body font-medium disabled:opacity-50"
+                      style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                    >
+                      Import {Object.keys(fileMapping).length} file{Object.keys(fileMapping).length !== 1 ? 's' : ''}
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {step === 'importing' && (
+                <div className="space-y-2">
+                  <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Importing files...</p>
+                  {Object.entries(fileMapping).map(([path, mapping]) => (
+                    <div key={path} className="flex items-center gap-3 p-2 rounded" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                      <span className="font-mono text-sm truncate flex-1" style={{ color: 'var(--text-primary)' }}>{path}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {mapping.type === 'chapter' ? `Ch ${mapping.chapterNum}` : 'Ref'}
+                      </span>
+                      <span className="text-sm">
+                        {importStatus[path] === 'loading' && '⏳'}
+                        {importStatus[path] === 'done' && '✅'}
+                        {importStatus[path]?.startsWith('error') && '❌'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================
+    // GITHUB PUSH MODAL
+    // ============================================
+    function GitHubPushModal({ config, chapters, onPush, onClose }) {
+      const [step, setStep] = useState('check'); // check, confirm, pushing, done
+      const [conflicts, setConflicts] = useState([]);
+      const [changes, setChanges] = useState([]);
+      const [pushStatus, setPushStatus] = useState({});
+      const [error, setError] = useState('');
+      const [commitMessage, setCommitMessage] = useState(`Update from Syuzhet - ${new Date().toLocaleDateString()}`);
+      
+      // Check for conflicts on mount
+      useEffect(() => {
+        checkChanges();
+      }, []);
+      
+      const checkChanges = async () => {
+        const foundChanges = [];
+        const foundConflicts = [];
+        
+        // Check each mapped chapter
+        for (const [path, mapping] of Object.entries(config.fileMapping)) {
+          if (mapping.type === 'chapter' && chapters[mapping.chapterNum]) {
+            const chapter = chapters[mapping.chapterNum];
+            const localSHA = config.fileSHAs[path];
+            
+            try {
+              const result = await GitHubAPI.checkForConflicts(
+                config.token, config.owner, config.repo, path, localSHA, 'syuzhet'
+              );
+              
+              if (result.isNew || !localSHA) {
+                foundChanges.push({ path, chapter: mapping.chapterNum, status: 'new' });
+              } else if (result.conflict) {
+                foundConflicts.push({ path, chapter: mapping.chapterNum, remoteSHA: result.remoteSHA });
+              } else {
+                foundChanges.push({ path, chapter: mapping.chapterNum, status: 'modified' });
+              }
+            } catch (err) {
+              // File might not exist on syuzhet branch yet
+              foundChanges.push({ path, chapter: mapping.chapterNum, status: 'new' });
+            }
+          }
+        }
+        
+        setChanges(foundChanges);
+        setConflicts(foundConflicts);
+        setStep('confirm');
+      };
+      
+      const handlePush = async () => {
+        setStep('pushing');
+        setError('');
+        
+        try {
+          // Ensure syuzhet branch exists
+          const branchExists = await GitHubAPI.branchExists(config.token, config.owner, config.repo, 'syuzhet');
+          if (!branchExists) {
+            await GitHubAPI.createBranch(config.token, config.owner, config.repo, 'syuzhet', config.branch);
+          }
+          
+          const newSHAs = { ...config.fileSHAs };
+          
+          // Push each changed file
+          for (const change of changes) {
+            const chapter = chapters[change.chapter];
+            if (!chapter) continue;
+            
+            setPushStatus(prev => ({ ...prev, [change.path]: 'pushing' }));
+            
+            try {
+              // Get current SHA on syuzhet branch (might be different from main)
+              const currentSHA = await GitHubAPI.getFileSHA(config.token, config.owner, config.repo, change.path, 'syuzhet');
+              
+              const newSHA = await GitHubAPI.createOrUpdateFile(
+                config.token, config.owner, config.repo,
+                change.path, chapter.content,
+                commitMessage,
+                'syuzhet',
+                currentSHA
+              );
+              
+              newSHAs[change.path] = newSHA;
+              setPushStatus(prev => ({ ...prev, [change.path]: 'done' }));
+            } catch (err) {
+              setPushStatus(prev => ({ ...prev, [change.path]: 'error' }));
+              throw err;
+            }
+          }
+          
+          // Update config with new SHAs
+          onPush({ ...config, fileSHAs: newSHAs, lastSync: Date.now() });
+          setStep('done');
+          
+        } catch (err) {
+          setError(err.message);
+        }
+      };
+      
+      const forceOverwrite = (path) => {
+        // Move conflict to changes
+        setConflicts(prev => prev.filter(c => c.path !== path));
+        setChanges(prev => [...prev, { path, chapter: conflicts.find(c => c.path === path)?.chapter, status: 'overwrite' }]);
+      };
+      
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}>
+          <div className="w-full max-w-2xl max-h-[90vh] rounded-lg overflow-hidden flex flex-col" style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}>
+            {/* Header */}
+            <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <h2 className="font-display text-2xl" style={{ color: 'var(--text-primary)' }}>
+                📤 Push to GitHub
+              </h2>
+              <button onClick={onClose} className="text-2xl" style={{ color: 'var(--text-muted)' }}>×</button>
+            </div>
+            
+            {/* Info banner */}
+            <div className="px-4 py-2 text-xs" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
+              All changes will be pushed to the <code className="px-1 rounded" style={{ backgroundColor: 'var(--bg-tertiary)' }}>syuzhet</code> branch. 
+              Create a PR on GitHub to merge into <code className="px-1 rounded" style={{ backgroundColor: 'var(--bg-tertiary)' }}>{config.branch}</code>.
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {step === 'check' && (
+                <div className="text-center py-8">
+                  <span className="animate-pulse text-4xl">⏳</span>
+                  <p className="mt-4" style={{ color: 'var(--text-muted)' }}>Checking for changes...</p>
+                </div>
+              )}
+              
+              {step === 'confirm' && (
+                <div className="space-y-4">
+                  {/* Conflicts */}
+                  {conflicts.length > 0 && (
+                    <div className="p-4 rounded-lg" style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                      <h3 className="font-medium mb-2" style={{ color: '#eab308' }}>⚠️ Conflicts Detected</h3>
+                      <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
+                        These files have changed on GitHub since you last imported. Pushing will overwrite the remote version.
+                      </p>
+                      {conflicts.map(c => (
+                        <div key={c.path} className="flex items-center justify-between p-2 rounded mb-1" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                          <span className="font-mono text-sm" style={{ color: 'var(--text-primary)' }}>{c.path}</span>
+                          <button
+                            onClick={() => forceOverwrite(c.path)}
+                            className="text-xs px-2 py-1 rounded"
+                            style={{ backgroundColor: 'rgba(234, 179, 8, 0.2)', color: '#eab308' }}
+                          >
+                            Overwrite Anyway
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Changes to push */}
+                  {changes.length > 0 ? (
+                    <div>
+                      <h3 className="font-medium mb-2" style={{ color: 'var(--text-primary)' }}>Changes to Push</h3>
+                      <div className="space-y-1">
+                        {changes.map(c => (
+                          <div key={c.path} className="flex items-center gap-3 p-2 rounded" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                            <span className="text-xs px-2 py-0.5 rounded" style={{
+                              backgroundColor: c.status === 'new' ? 'rgba(16, 185, 129, 0.2)' : 
+                                             c.status === 'overwrite' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(99, 102, 241, 0.2)',
+                              color: c.status === 'new' ? '#10b981' : 
+                                    c.status === 'overwrite' ? '#eab308' : '#6366f1'
+                            }}>
+                              {c.status === 'new' ? 'NEW' : c.status === 'overwrite' ? 'OVERWRITE' : 'MOD'}
+                            </span>
+                            <span className="font-mono text-sm flex-1" style={{ color: 'var(--text-primary)' }}>{c.path}</span>
+                            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Ch {c.chapter}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ color: 'var(--text-muted)' }}>No mapped chapter files to push.</p>
+                  )}
+                  
+                  {/* Commit message */}
+                  <div>
+                    <label className="block text-sm mb-2" style={{ color: 'var(--text-primary)' }}>Commit Message</label>
+                    <input
+                      type="text"
+                      value={commitMessage}
+                      onChange={(e) => setCommitMessage(e.target.value)}
+                      className="w-full rounded px-3 py-2 text-sm"
+                      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+                  
+                  {error && (
+                    <div className="p-3 rounded text-sm" style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}>
+                      {error}
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      onClick={onClose}
+                      className="px-6 py-2 rounded font-body"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePush}
+                      disabled={changes.length === 0}
+                      className="flex-1 py-2 rounded font-body font-medium disabled:opacity-50"
+                      style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                    >
+                      Push {changes.length} file{changes.length !== 1 ? 's' : ''} to syuzhet branch
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {step === 'pushing' && (
+                <div className="space-y-2">
+                  <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Pushing to syuzhet branch...</p>
+                  {changes.map(c => (
+                    <div key={c.path} className="flex items-center gap-3 p-2 rounded" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                      <span className="font-mono text-sm flex-1" style={{ color: 'var(--text-primary)' }}>{c.path}</span>
+                      <span className="text-sm">
+                        {pushStatus[c.path] === 'pushing' && '⏳'}
+                        {pushStatus[c.path] === 'done' && '✅'}
+                        {pushStatus[c.path] === 'error' && '❌'}
+                      </span>
+                    </div>
+                  ))}
+                  {error && (
+                    <div className="p-3 rounded text-sm mt-4" style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}>
+                      {error}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {step === 'done' && (
+                <div className="text-center py-8">
+                  <span className="text-6xl">✅</span>
+                  <h3 className="font-display text-xl mt-4" style={{ color: 'var(--text-primary)' }}>Push Complete!</h3>
+                  <p className="mt-2" style={{ color: 'var(--text-muted)' }}>
+                    Changes are now on the <code className="px-1 rounded" style={{ backgroundColor: 'var(--bg-tertiary)' }}>syuzhet</code> branch.
+                  </p>
+                  <p className="text-sm mt-4" style={{ color: 'var(--text-muted)' }}>
+                    <a 
+                      href={`https://github.com/${config.owner}/${config.repo}/compare/${config.branch}...syuzhet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'var(--accent-gold)' }}
+                    >
+                      Open GitHub to create a Pull Request →
+                    </a>
+                  </p>
+                  <button
+                    onClick={onClose}
+                    className="mt-6 px-6 py-2 rounded font-body"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       );
