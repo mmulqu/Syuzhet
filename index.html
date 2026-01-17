@@ -277,7 +277,7 @@
         color: 'gold',
         icon: '◈',
         description: 'Creates story bible, disclosure schedules, tension curves, and beat sheets.',
-        contextAccess: ['story_bible', 'tension_curve', 'chapters', 'beats'],
+        contextAccess: ['story_bible', 'disclosures', 'tension_curve', 'chapters', 'beats'],
         systemPrompt: `You are the Architect, designer of the information economy for fiction.
 
 Your role is to design and maintain:
@@ -325,7 +325,7 @@ Output structured YAML for all information architecture documents.`
         color: 'emerald',
         icon: '✦',
         description: 'Writes and revises prose based on beat sheets and feedback.',
-        contextAccess: ['story_bible', 'beats', 'feedback', 'chapters'],
+        contextAccess: ['story_bible', 'disclosures', 'beats', 'feedback', 'chapters'],
         systemPrompt: `You are the Scribe, weaver of prose from structured beats.
 
 You write prose from beats and revise based on feedback. You do not decide what happens or what's revealed—that's the Architect's job. You decide how it reads on the page.
@@ -384,7 +384,7 @@ Every criticism must include a specific instruction. Note strengths too.`
         color: 'violet',
         icon: '◆',
         description: 'Verifies information discipline and revision integrity.',
-        contextAccess: ['story_bible', 'chapters', 'feedback', 'beats'],
+        contextAccess: ['story_bible', 'disclosures', 'chapters', 'feedback', 'beats'],
         systemPrompt: `You are the Keeper, guardian of what must stay hidden.
 
 You guard constraints and verify nothing broke. You are the final gate.
@@ -846,6 +846,7 @@ Please output ONLY the missing YAML sections now.`;
       const [chats, setChats] = useState({});
       const [storyBible, setStoryBible] = useState('');
       const [tensionCurve, setTensionCurve] = useState('');
+      const [disclosures, setDisclosures] = useState('');
       const [chapters, setChapters] = useState({});
       const [customPrompts, setCustomPrompts] = useState({});
       const [view, setView] = useState('chat'); // chat, bible, chapters, settings, github
@@ -907,6 +908,9 @@ Please output ONLY the missing YAML sections now.`;
         
         const savedCurve = Storage.get('tension_curve') || '';
         setTensionCurve(savedCurve);
+        
+        const savedDisclosures = Storage.get('disclosures') || '';
+        setDisclosures(savedDisclosures);
         
         const savedChapters = Storage.get('chapters') || {};
         setChapters(savedChapters);
@@ -997,6 +1001,9 @@ Please output ONLY the missing YAML sections now.`;
         
         if (agent.contextAccess.includes('story_bible') && storyBible) {
           context += `\n\n<story_bible>\n${storyBible}\n</story_bible>`;
+        }
+        if (agent.contextAccess.includes('disclosures') && disclosures) {
+          context += `\n\n<disclosures>\n${disclosures}\n</disclosures>`;
         }
         if (agent.contextAccess.includes('tension_curve') && tensionCurve) {
           context += `\n\n<tension_curve>\n${tensionCurve}\n</tension_curve>`;
@@ -1137,6 +1144,12 @@ Please output ONLY the missing YAML sections now.`;
       const saveTensionCurve = (content) => {
         setTensionCurve(content);
         Storage.set('tension_curve', content);
+      };
+      
+      // Save disclosures
+      const saveDisclosures = (content) => {
+        setDisclosures(content);
+        Storage.set('disclosures', content);
       };
 
       // Save chapter
@@ -1416,8 +1429,10 @@ Please output ONLY the missing YAML sections now.`;
               <StoryBibleEditor
                 storyBible={storyBible}
                 tensionCurve={tensionCurve}
+                disclosures={disclosures}
                 onSaveBible={saveStoryBible}
                 onSaveCurve={saveTensionCurve}
+                onSaveDisclosures={saveDisclosures}
               />
             )}
             
@@ -2890,15 +2905,18 @@ Please output ONLY the missing YAML sections now.`;
     // ============================================
     // STORY BIBLE EDITOR
     // ============================================
-    function StoryBibleEditor({ storyBible, tensionCurve, onSaveBible, onSaveCurve }) {
+    function StoryBibleEditor({ storyBible, tensionCurve, disclosures, onSaveBible, onSaveCurve, onSaveDisclosures }) {
       const [bibleContent, setBibleContent] = useState(storyBible);
       const [curveContent, setCurveContent] = useState(tensionCurve);
+      const [disclosuresContent, setDisclosuresContent] = useState(disclosures);
       const [activeTab, setActiveTab] = useState('bible');
       const [bibleSaved, setBibleSaved] = useState(false);
       const [curveSaved, setCurveSaved] = useState(false);
+      const [disclosuresSaved, setDisclosuresSaved] = useState(false);
       
       useEffect(() => { setBibleContent(storyBible); }, [storyBible]);
       useEffect(() => { setCurveContent(tensionCurve); }, [tensionCurve]);
+      useEffect(() => { setDisclosuresContent(disclosures); }, [disclosures]);
       
       const handleSaveBible = () => {
         onSaveBible(bibleContent);
@@ -2912,10 +2930,16 @@ Please output ONLY the missing YAML sections now.`;
         setTimeout(() => setCurveSaved(false), 1500);
       };
       
+      const handleSaveDisclosures = () => {
+        onSaveDisclosures(disclosuresContent);
+        setDisclosuresSaved(true);
+        setTimeout(() => setDisclosuresSaved(false), 1500);
+      };
+      
       return (
         <div className="flex-1 flex flex-col">
           <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
-            <h2 className="font-display text-3xl mb-4" style={{ color: 'var(--text-primary)' }}>Story Bible & Tension Curve</h2>
+            <h2 className="font-display text-3xl mb-4" style={{ color: 'var(--text-primary)' }}>Information Architecture</h2>
             <div className="flex gap-2">
               <button
                 onClick={() => setActiveTab('bible')}
@@ -2926,6 +2950,16 @@ Please output ONLY the missing YAML sections now.`;
                 }
               >
                 Story Bible
+              </button>
+              <button
+                onClick={() => setActiveTab('disclosures')}
+                className="px-4 py-2 text-sm font-body rounded transition-colors"
+                style={activeTab === 'disclosures' 
+                  ? { backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }
+                  : { color: 'var(--text-muted)' }
+                }
+              >
+                Disclosures
               </button>
               <button
                 onClick={() => setActiveTab('curve')}
@@ -2944,13 +2978,13 @@ Please output ONLY the missing YAML sections now.`;
             {activeTab === 'bible' && (
               <div className="h-full flex flex-col">
                 <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                  Define objective reality, disclosure schedule, and character knowledge. Use YAML format.
+                  Define objective reality—every fact that's "true" in your story. This is FROZEN once approved.
                   The Architect, Scribe, and Keeper can see this. The Critic cannot.
                 </p>
                 <textarea
                   value={bibleContent}
                   onChange={(e) => setBibleContent(e.target.value)}
-                  placeholder={`# Story Bible\n\nobjective_reality:\n  - fact: "Marcus killed Elena"\n    when: "3 months before story"\n\ndisclosure_schedule:\n  - fact_id: killer_identity\n    hinted_at: [3, 7]\n    suspected_by_reader: 12\n    confirmed: 18\n\ncharacter_knowledge:\n  marcus:\n    knows: ["he killed Elena"]\n    believes_falsely: ["no witnesses"]`}
+                  placeholder={`# Story Bible - Objective Reality\n\nworld:\n  setting: "Near-future Maine"\n  technology: "AI grief implants exist"\n\ncharacters:\n  persephone:\n    age: 34\n    occupation: "Ornithologist"\n    key_facts:\n      - "Lost daughter Iphy to drowning"\n      - "Has AI implant for grief management"\n\nevents:\n  iphy_death:\n    what: "Drowned in backyard pool"\n    when: "8 months before story starts"\n    witnesses: "None directly"`}
                   className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none page-container prose-editor"
                   style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
@@ -2964,15 +2998,88 @@ Please output ONLY the missing YAML sections now.`;
               </div>
             )}
             
+            {activeTab === 'disclosures' && (
+              <div className="h-full flex flex-col">
+                <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+                  Track when facts are revealed: <strong>disclosure_schedule</strong> (hinted → suspected → confirmed) 
+                  and <strong>character_knowledge</strong> (who knows what). Paste the Architect's YAML output here.
+                </p>
+                <textarea
+                  value={disclosuresContent}
+                  onChange={(e) => setDisclosuresContent(e.target.value)}
+                  placeholder={`disclosure_schedule:
+  secret_name:
+    description: "What is objectively true"
+    hinted_at: [1, 3, 5]
+    suspected_by_reader: 6
+    confirmed: 8
+
+  true_surprise:
+    description: "A twist with no foreshadowing"
+    hinted_at: []
+    suspected_by_reader: null
+    confirmed: 12
+    notes: "TRUE SURPRISE - no hints given"
+
+character_knowledge:
+  protagonist:
+    knows:
+      - "fact 1"
+      - "fact 2"
+    doesnt_know:
+      - "the antagonist's true identity"
+    believes_falsely:
+      - "their friend is loyal"
+
+reader_knowledge_progression:
+  chapter_3:
+    knows: ["fact 1"]
+    suspects: ["something about fact 2"]
+    doesnt_know: ["the twist"]`}
+                  className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none page-container prose-editor"
+                  style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                />
+                <button
+                  onClick={handleSaveDisclosures}
+                  className={`mt-4 font-body font-medium px-6 py-2 rounded self-end transition-colors ${disclosuresSaved ? 'success-flash' : ''}`}
+                  style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                >
+                  {disclosuresSaved ? '✓ Saved' : 'Save Disclosures'}
+                </button>
+              </div>
+            )}
+            
             {activeTab === 'curve' && (
               <div className="h-full flex flex-col">
                 <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                  Define target tension levels (1-10) for each chapter. The Critic will evaluate drafts against these targets.
+                  Define target tension levels (1-10) and what's WITHHELD per chapter. The Critic evaluates against these targets.
                 </p>
                 <textarea
                   value={curveContent}
                   onChange={(e) => setCurveContent(e.target.value)}
-                  placeholder={`# Tension Curve\n\nchapters:\n  1:\n    target: 4\n    type: "hook, establish normal"\n  2:\n    target: 3\n    type: "deepen character"\n  3:\n    target: 5\n    type: "first complication"\n  4:\n    target: 6\n    type: "escalation"`}
+                  placeholder={`tension_curve:
+  chapter_1:
+    intensity: 5
+    tension_type: "grief/mystery"
+    withheld:
+      - "What happened to Iphy"
+      - "Why she hates yellow"
+    reader_experience: "Unease, sympathy"
+
+  chapter_2:
+    intensity: 6
+    tension_type: "body horror"
+    withheld:
+      - "The brownout's significance"
+      - "James exists"
+    valley_purpose: null  # not a valley
+
+  chapter_3:
+    intensity: 4
+    tension_type: "domestic grief"
+    withheld:
+      - "Mike's guilt"
+    valley_purpose: "Breathing room before journey"`}
                   className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none page-container prose-editor"
                   style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                 />
