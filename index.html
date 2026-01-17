@@ -1452,6 +1452,10 @@ Please output ONLY the missing YAML sections now.`;
                 chapters={chapters}
                 onSaveChapter={saveChapter}
                 onDeleteChapter={deleteChapter}
+                apiKeys={apiKeys}
+                verifierModel={verifierModel}
+                storyBible={storyBible}
+                disclosures={disclosures}
               />
             )}
             
@@ -3102,12 +3106,13 @@ reader_knowledge_progression:
     // ============================================
     // CHAPTER MANAGER
     // ============================================
-    function ChapterManager({ chapters, onSaveChapter, onDeleteChapter }) {
+    function ChapterManager({ chapters, onSaveChapter, onDeleteChapter, apiKeys, verifierModel, storyBible, disclosures }) {
       const [selectedChapter, setSelectedChapter] = useState(null);
       const [newChapterNum, setNewChapterNum] = useState('');
-      const [editContent, setEditContent] = useState({ beats: '', draft: '', feedback: '' });
-      const [activeTab, setActiveTab] = useState('beats');
+      const [editContent, setEditContent] = useState({ beats: '', draft: '', feedback: '', summary: '' });
+      const [activeTab, setActiveTab] = useState('draft');
       const [saveFlash, setSaveFlash] = useState(false);
+      const [generating, setGenerating] = useState(null); // 'summary' | 'beats' | null
       
       const chapterNums = Object.keys(chapters).sort((a, b) => parseInt(a) - parseInt(b));
       
@@ -3115,8 +3120,9 @@ reader_knowledge_progression:
         if (selectedChapter && chapters[selectedChapter]) {
           setEditContent({
             beats: chapters[selectedChapter].beats || '',
-            draft: chapters[selectedChapter].draft || '',
-            feedback: chapters[selectedChapter].feedback || ''
+            draft: chapters[selectedChapter].draft || chapters[selectedChapter].content || '',
+            feedback: chapters[selectedChapter].feedback || '',
+            summary: chapters[selectedChapter].summary || ''
           });
         }
       }, [selectedChapter, chapters]);
@@ -3124,11 +3130,304 @@ reader_knowledge_progression:
       const createChapter = () => {
         const num = parseInt(newChapterNum);
         if (num > 0) {
-          onSaveChapter(num, { beats: '', draft: '', feedback: '' });
+          onSaveChapter(num, { beats: '', draft: '', feedback: '', summary: '' });
           setSelectedChapter(num.toString());
           setNewChapterNum('');
         }
       };
+      
+      // Get API config for verifier model
+      const getApiConfig = () => {
+        const model = MODELS[verifierModel];
+        if (!model) return null;
+        const apiKey = apiKeys[model.provider];
+        if (!apiKey) return null;
+        return { model, apiKey, modelId: verifierModel };
+      };
+      
+      // Generate summary
+      const generateSummary = async () => {
+        const config = getApiConfig();
+        if (!config) {
+          alert('No API key configured for the verifier model. Set one in Settings.');
+          return;
+        }
+        
+        const draft = editContent.draft;
+        if (!draft || draft.trim().length < 100) {
+          alert('Chapter draft is too short to summarize. Add more content first.');
+          return;
+        }
+        
+        setGenerating('summary');
+        
+        try {
+          const systemPrompt = `You are a concise summarizer. Summarize the following chapter in 3-6 sentences. Focus on:
+- Key plot events
+- Character actions and decisions
+- Important revelations or changes
+- Emotional beats
+
+Be factual and direct. No commentary or analysis.`;
+
+          const userMessage = `Summarize this chapter:\n\n${draft}`;
+          
+          let response;
+          if (config.model.provider === 'anthropic') {
+            response = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': config.apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true'
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 500,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userMessage }]
+              })
+            });
+            const data = await response.json();
+            if (data.content?.[0]?.text) {
+              const summary = data.content[0].text;
+              setEditContent(prev => ({ ...prev, summary }));
+              onSaveChapter(selectedChapter, { summary });
+            }
+          } else if (config.model.provider === 'openai') {
+            response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 500,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userMessage }
+                ]
+              })
+            });
+            const data = await response.json();
+            if (data.choices?.[0]?.message?.content) {
+              const summary = data.choices[0].message.content;
+              setEditContent(prev => ({ ...prev, summary }));
+              onSaveChapter(selectedChapter, { summary });
+            }
+          } else if (config.model.provider === 'deepseek') {
+            response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 500,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userMessage }
+                ]
+              })
+            });
+            const data = await response.json();
+            if (data.choices?.[0]?.message?.content) {
+              const summary = data.choices[0].message.content;
+              setEditContent(prev => ({ ...prev, summary }));
+              onSaveChapter(selectedChapter, { summary });
+            }
+          } else if (config.model.provider === 'moonshot') {
+            response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 500,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userMessage }
+                ]
+              })
+            });
+            const data = await response.json();
+            if (data.choices?.[0]?.message?.content) {
+              const summary = data.choices[0].message.content;
+              setEditContent(prev => ({ ...prev, summary }));
+              onSaveChapter(selectedChapter, { summary });
+            }
+          }
+        } catch (err) {
+          console.error('Error generating summary:', err);
+          alert('Error generating summary: ' + err.message);
+        }
+        
+        setGenerating(null);
+      };
+      
+      // Generate beats
+      const generateBeats = async () => {
+        const config = getApiConfig();
+        if (!config) {
+          alert('No API key configured for the verifier model. Set one in Settings.');
+          return;
+        }
+        
+        const draft = editContent.draft;
+        if (!draft || draft.trim().length < 100) {
+          alert('Chapter draft is too short to analyze. Add more content first.');
+          return;
+        }
+        
+        setGenerating('beats');
+        
+        try {
+          const systemPrompt = `You are a story analyst. Analyze the chapter and produce a beat sheet in YAML format.
+
+For each beat, identify:
+- beat number
+- brief description of what happens
+- withheld: what information is being kept from the reader
+- reader_learns: what new information the reader gains
+- tension_level: 1-10 estimate
+
+Also note any:
+- Foreshadowing or hints dropped
+- Character knowledge changes
+- Emotional shifts
+
+${storyBible ? `\n<story_bible>\n${storyBible}\n</story_bible>` : ''}
+${disclosures ? `\n<disclosures>\n${disclosures}\n</disclosures>` : ''}
+
+Output YAML format:
+\`\`\`yaml
+chapter_${selectedChapter}_beats:
+  beats:
+    - beat: 1
+      description: "..."
+      withheld: ["..."]
+      reader_learns: ["..."]
+      tension_level: 5
+    - beat: 2
+      ...
+  
+  foreshadowing:
+    - "hint about X dropped via Y"
+  
+  chapter_summary: "One sentence summary"
+\`\`\``;
+
+          const userMessage = `Analyze this chapter and create a beat sheet:\n\n${draft}`;
+          
+          let response;
+          if (config.model.provider === 'anthropic') {
+            response = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': config.apiKey,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true'
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 2000,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userMessage }]
+              })
+            });
+            const data = await response.json();
+            if (data.content?.[0]?.text) {
+              const beats = data.content[0].text;
+              setEditContent(prev => ({ ...prev, beats }));
+              onSaveChapter(selectedChapter, { beats });
+              setActiveTab('beats');
+            }
+          } else if (config.model.provider === 'openai') {
+            response = await fetch('https://api.openai.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 2000,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userMessage }
+                ]
+              })
+            });
+            const data = await response.json();
+            if (data.choices?.[0]?.message?.content) {
+              const beats = data.choices[0].message.content;
+              setEditContent(prev => ({ ...prev, beats }));
+              onSaveChapter(selectedChapter, { beats });
+              setActiveTab('beats');
+            }
+          } else if (config.model.provider === 'deepseek') {
+            response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 2000,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userMessage }
+                ]
+              })
+            });
+            const data = await response.json();
+            if (data.choices?.[0]?.message?.content) {
+              const beats = data.choices[0].message.content;
+              setEditContent(prev => ({ ...prev, beats }));
+              onSaveChapter(selectedChapter, { beats });
+              setActiveTab('beats');
+            }
+          } else if (config.model.provider === 'moonshot') {
+            response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.apiKey}`
+              },
+              body: JSON.stringify({
+                model: config.modelId,
+                max_tokens: 2000,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userMessage }
+                ]
+              })
+            });
+            const data = await response.json();
+            if (data.choices?.[0]?.message?.content) {
+              const beats = data.choices[0].message.content;
+              setEditContent(prev => ({ ...prev, beats }));
+              onSaveChapter(selectedChapter, { beats });
+              setActiveTab('beats');
+            }
+          }
+        } catch (err) {
+          console.error('Error generating beats:', err);
+          alert('Error generating beats: ' + err.message);
+        }
+        
+        setGenerating(null);
+      };
+      
+      const hasApiKey = getApiConfig() !== null;
+      const hasDraft = editContent.draft && editContent.draft.trim().length >= 100;
       
       return (
         <div className="flex-1 flex">
@@ -3176,21 +3475,41 @@ reader_knowledge_progression:
                 <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="font-display text-2xl" style={{ color: 'var(--text-primary)' }}>Chapter {selectedChapter}</h2>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete Chapter ${selectedChapter}? This cannot be undone.`)) {
-                          onDeleteChapter(selectedChapter);
-                          setSelectedChapter(null);
-                        }
-                      }}
-                      className="text-sm px-3 py-1.5 rounded transition-colors"
-                      style={{ backgroundColor: 'rgba(139, 41, 66, 0.15)', color: 'var(--accent-crimson)' }}
-                    >
-                      Delete Chapter
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={generateSummary}
+                        disabled={generating || !hasApiKey || !hasDraft}
+                        className="text-sm px-3 py-1.5 rounded transition-colors disabled:opacity-40"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                        title={!hasApiKey ? 'Set verifier model API key in Settings' : !hasDraft ? 'Add chapter content first' : 'Generate 3-6 sentence summary'}
+                      >
+                        {generating === 'summary' ? '⏳ Summarizing...' : '📝 Summarize'}
+                      </button>
+                      <button
+                        onClick={generateBeats}
+                        disabled={generating || !hasApiKey || !hasDraft}
+                        className="text-sm px-3 py-1.5 rounded transition-colors disabled:opacity-40"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                        title={!hasApiKey ? 'Set verifier model API key in Settings' : !hasDraft ? 'Add chapter content first' : 'Auto-generate beat sheet'}
+                      >
+                        {generating === 'beats' ? '⏳ Analyzing...' : '🎬 Gen Beats'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete Chapter ${selectedChapter}? This cannot be undone.`)) {
+                            onDeleteChapter(selectedChapter);
+                            setSelectedChapter(null);
+                          }
+                        }}
+                        className="text-sm px-3 py-1.5 rounded transition-colors"
+                        style={{ backgroundColor: 'rgba(139, 41, 66, 0.15)', color: 'var(--accent-crimson)' }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                   <div className="flex gap-2">
-                    {['beats', 'draft', 'feedback'].map(tab => (
+                    {['draft', 'beats', 'summary', 'feedback'].map(tab => (
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
@@ -3211,8 +3530,9 @@ reader_knowledge_progression:
                     value={editContent[activeTab]}
                     onChange={(e) => setEditContent({ ...editContent, [activeTab]: e.target.value })}
                     placeholder={
-                      activeTab === 'beats' ? '# Beat Sheet\n\nbeats:\n  - beat: 1\n    description: "..."\n    withheld: ["..."]\n    reader_learns: ["..."]' :
                       activeTab === 'draft' ? 'Chapter prose goes here...' :
+                      activeTab === 'beats' ? '# Beat Sheet\n\nbeats:\n  - beat: 1\n    description: "..."\n    withheld: ["..."]\n    reader_learns: ["..."]' :
+                      activeTab === 'summary' ? 'Chapter summary will appear here after clicking "Summarize"...' :
                       '# Feedback from Critic\n\n{ "issues": [], "preserve": [] }'
                     }
                     className="flex-1 rounded-lg px-4 py-3 font-mono text-sm focus:outline-none resize-none page-container prose-editor"
