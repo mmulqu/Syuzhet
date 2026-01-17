@@ -1165,6 +1165,7 @@ Please output ONLY the missing YAML sections now.`;
       const currentChat = currentChatId ? chats[currentChatId] : null;
 
       return (
+      <React.Fragment>
         <div className="min-h-screen flex" style={{ backgroundColor: 'var(--bg-primary)' }}>
           {/* Sidebar */}
           <div className="w-64 flex flex-col" style={{ backgroundColor: 'var(--bg-primary)', borderRight: '1px solid var(--border-color)' }}>
@@ -1492,6 +1493,7 @@ Please output ONLY the missing YAML sections now.`;
             onClose={() => setGithubModal(null)}
           />
         )}
+      </React.Fragment>
       );
     }
 
