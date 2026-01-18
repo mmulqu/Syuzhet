@@ -24,16 +24,18 @@ This kills suspense. Not because the prose is bad, but because **information eco
 
 **The solution:** Separate **plot** (what happens) from **disclosure** (when reader learns about it).
 
+**The method:** Use **constraints** instead of creative direction.
+
 ---
 
 ## The Four Agents
 
 | Agent | Role | Key Responsibility |
 |-------|------|--------------------|
-| **Architect** | Designs information economy | Story bible, disclosure schedule, beat sheets |
-| **Scribe** | Writes and revises prose | Draft quality, applying feedback |
-| **Critic** | Evaluates reader experience | Feedback through 3 lenses (reader/tension/craft) |
-| **Keeper** | Guards constraints, verifies integrity | Pass/fail gate |
+| **Architect** | Designs constraints | Disclosure schedule, withheld lists, tension targets |
+| **Scribe** | Writes within constraints | Creative freedom + respect for constraints |
+| **Critic** | Evaluates blindly | Reader experience (sees prose only, not plans) |
+| **Keeper** | Verifies against constraints | Pass/fail gate for leakage and tension |
 
 ---
 
@@ -75,23 +77,23 @@ At any moment in a story, there are four distinct states:
 ```
 Architect
     ↓
-  Creates story bible + chapter beats (once per chapter)
+  Creates story bible + constraints (once per chapter)
     ↓
 Scribe
     ↓
-  Writes draft
+  Writes draft within constraints
     ↓
 Critic
     ↓
-  Produces feedback (reader state, tension, craft issues)
+  Evaluates blindly (prose only)
     ↓
 Scribe
     ↓
-  Revises based on prioritized feedback
+  Revises based on feedback
     ↓
 Keeper
     ↓
-  Verifies (leakage? preserved spans intact? constraints?)
+  Verifies against constraints (leakage? tension? preserved spans?)
     ↓
   [if failed] → back to Scribe
   [if passed] → next chapter
@@ -107,15 +109,21 @@ Keeper
 
 Changes to disclosure schedule or character knowledge require re-evaluating all prior chapters.
 
-### 2. Critic Never Sees Story Bible
+### 2. Critic Never Sees Story Architecture
 
-When Critic wears the "reader simulation" hat, they **only know what the text has shown**.
+When Critic evaluates, they **only see prose**.
+
+No story bible, no disclosure schedule, no constraints files, no withheld lists.
 
 This prevents the bias of "I know what's coming."
 
-### 3. Keeper is the Only Verification Agent with Full Bible Access
+### 3. Keeper is the Only Verification Agent with Full Access
+
+Keeper sees everything: story bible, disclosure schedule, withheld lists, tension targets.
 
 Keeper compares draft against disclosure schedule to catch leakage.
+
+Keeper compares Critic's tension assessment to the target.
 
 This is the enforcement layer.
 
@@ -130,9 +138,23 @@ If feedback conflicts with a preserved span → preserve wins.
 Every agent is constrained by the disclosure schedule.
 
 **Architect** designs it.
-**Scribe** follows it.
+**Scribe** follows withheld lists (doesn't see full disclosure schedule).
 **Critic** evaluates against it (unknowingly, through reader simulation).
 **Keeper** enforces it.
+
+### 6. Constraints Over Creative Direction
+
+**Architect provides:**
+- WHAT to hide (withheld lists)
+- WHEN to reveal (disclosure schedule)
+- WHAT tension level to hit (tension targets)
+
+**Architect does NOT provide:**
+- HOW to write scenes (Scribe's job)
+- WHAT events to include (Scribe's creative freedom)
+- Beat-by-beat plot outlines (removed - too prescriptive)
+
+**Scribe has creative freedom within constraints.**
 
 ---
 
@@ -140,14 +162,18 @@ Every agent is constrained by the disclosure schedule.
 
 ### Architect
 
-**Identity:** Designer of information economy
+**Identity:** Designer of information economy and constraints
 
 **Creates:**
 - Story bible (`story_bible.yaml`)
-- Disclosure schedule (when facts: hinted → suspected → confirmed)
-- Tension curve (`artifacts/tension_curve.yaml`)
+- Disclosure schedule (`disclosure_schedule.yaml`) - when facts: hinted → suspected → confirmed (for Keeper verification)
+- Tension targets (`artifacts/tension_targets.yaml`) - target intensity per chapter (constraint for Scribe)
+- Withheld lists (per chapter in `chapters/chXX/constraints.yaml`) - facts that MUST NOT be revealed
 - Character knowledge maps
-- Chapter beat sheets (`chapters/chXX/beats.yaml`)
+
+**Does NOT create:**
+- ~~Beat sheets~~ (removed - were creative direction, not constraints)
+- ~~Scene outlines~~ (Scribe's creative freedom)
 
 **State:** `agents/architect/state.yaml`
 
@@ -157,22 +183,40 @@ Every agent is constrained by the disclosure schedule.
 
 ### Scribe
 
-**Identity:** Writer and reviser of prose
+**Identity:** Writer with creative freedom within constraints
 
 **Reads:**
-- Chapter beat sheet (what happens, what's withheld)
+- Chapter constraints (`chapters/chXX/constraints.yaml`) - withheld lists + tension target
 - Story bible (for consistency reference only)
+- Previous chapter prose (for continuity)
 - Feedback from Critic
+
+**Does NOT read:**
+- ~~Beat sheets~~ (don't exist)
+- ~~Disclosure schedule~~ (that's for Keeper verification)
 
 **Writes:**
 - Draft prose (`chapters/chXX/draft.md`)
 
+**Creative freedom:**
+- What events happen
+- What scenes to include
+- POV character (unless specified)
+- How to structure chapter
+- Voice and style
+
+**Must respect:**
+- Withheld list (never reveal these facts)
+- Tension target (hit this emotional level)
+- Allowed breadcrumbs (can plant these subtly)
+- Continuity with previous chapters
+
 **Rules:**
-- NEVER reveal anything marked WITHHELD
+- NEVER reveal anything in withheld list
 - NEVER have characters explain motivations
 - End scenes on questions, not answers
 - Show, don't tell
-- When character knows something reader doesn't, write behavior AS IF they know it
+- Character knowledge ≠ reader knowledge
 
 **State:** `agents/scribe/state.yaml`
 
@@ -182,7 +226,7 @@ Every agent is constrained by the disclosure schedule.
 
 ### Critic
 
-**Identity:** Evaluator through three lenses
+**Identity:** Evaluator through three lenses (completely blind to architecture)
 
 **Three Lenses:**
 
@@ -190,17 +234,29 @@ Every agent is constrained by the disclosure schedule.
    - What does reader know/suspect/wonder?
    - Where is dramatic irony active?
    - Where was curiosity killed?
-   - **Critically:** Does this WITHOUT seeing story bible
+   - **Critically:** Does this WITHOUT seeing story architecture
 
 2. **Tension Assessment**
-   - Does chapter hit target tension?
+   - What tension level does this create?
    - Where are stakes deflated?
    - Where does pacing go flat?
+   - **Note:** Assesses FELT tension, doesn't compare to target (Keeper does that)
 
 3. **Craft Critique**
    - Clichés, weak verbs, telling not showing
    - POV violations, overwriting
    - Also: notes STRENGTHS (preserve candidates)
+
+**Reads:**
+- Prose only (`chapters/chXX/draft.md`)
+- Chapter summaries (optional, for continuity)
+
+**Does NOT read:**
+- ~~Story bible~~ (stay blind)
+- ~~Disclosure schedule~~ (stay blind)
+- ~~Withheld lists~~ (stay blind)
+- ~~Constraints files~~ (stay blind)
+- ~~Tension targets~~ (assess actual, don't compare)
 
 **Output:** `chapters/chXX/feedback.json`
 
@@ -212,19 +268,26 @@ Every agent is constrained by the disclosure schedule.
 
 ### Keeper
 
-**Identity:** Gatekeeper who verifies nothing broke
+**Identity:** Gatekeeper who verifies against constraints
 
 **Checks:**
 
 1. **Information Discipline**
    - Compare draft against disclosure schedule
+   - Compare draft against withheld lists
    - Flag leakage (critical/major/near-miss)
    - Verify POV character only knows what they should
 
-2. **Revision Integrity**
+2. **Tension Verification**
+   - Compare Critic's tension assessment to target
+   - Variance ≤1: PASS
+   - Variance 2: WARN
+   - Variance ≥3: REJECT
+
+3. **Revision Integrity**
    - Preserved spans intact?
    - No new leakage introduced in editing?
-   - Constraints satisfied (word count, POV, etc.)?
+   - Constraints satisfied (word count, POV, banned phrases)?
    - No continuity errors?
 
 **Verdict:** PASS or REJECT
@@ -244,6 +307,7 @@ loom/
 ├── CLAUDE.md                     # This file - project overview
 ├── README.md                     # Detailed documentation
 ├── story_bible.yaml              # Frozen source of truth
+├── disclosure_schedule.yaml      # When facts are revealed (for Keeper)
 │
 ├── agents/
 │   ├── architect/
@@ -264,13 +328,13 @@ loom/
 │
 ├── chapters/
 │   └── ch01/
-│       ├── beats.yaml            # Architect's plan for this chapter
+│       ├── constraints.yaml      # Withheld lists + tension target
 │       ├── draft.md              # Scribe's prose
 │       ├── feedback.json         # Critic's evaluation
 │       └── verification.json     # Keeper's pass/fail verdict
 │
 ├── artifacts/
-│   └── tension_curve.yaml        # Tension targets per chapter
+│   └── tension_targets.yaml     # Tension targets per chapter
 │
 ├── prompts/                      # Legacy single-agent prompts
 ├── verification/                 # Legacy leakage checker script
@@ -281,34 +345,40 @@ loom/
 
 ## Workflow Example: Writing Chapter 7
 
-### Step 1: Architect Plans
+### Step 1: Architect Creates Constraints
 
-**Architect creates:** `chapters/ch07/beats.yaml`
+**Architect creates:** `chapters/ch07/constraints.yaml`
 
 ```yaml
-chapter_number: 7
-target_tension: 6
+chapter: 7
+tension_target: 6
 
-information_state:
-  reader_learns:
-    - "Marcus has childhood photograph with Elena"
-  reader_suspects:
-    - "Marcus is hiding something about their relationship"
-  withheld:
-    - "That they're siblings (ch 17)"
-    - "That Marcus killed Elena (ch 18)"
+withheld:  # Scribe MUST NOT reveal these
+  - fact_id: central_mystery
+    fact: "That Marcus killed Elena"
+    specific_prohibitions:
+      - "No internal thoughts like 'I killed her'"
+      - "No explicit guilt about the murder"
+      - "No memories of pushing her"
 
-beats:
-  - beat_number: 1
-    description: "Marcus retrieves hidden box"
-    # ...
+  - fact_id: sibling_relationship
+    fact: "That Marcus and Elena are siblings"
+    specific_prohibitions:
+      - "Don't state the relationship"
+      - "Photo can show them as children but not labeled"
+
+allowed_breadcrumbs:  # What CAN be shown this chapter
+  - "Marcus burns childhood photograph (suspicious behavior)"
+  - "Marcus avoids looking at lighthouse (guilt reaction)"
+
+previous_chapter_prose: "chapters/ch06/draft.md"
 ```
 
 **Updates:** `agents/architect/state.yaml`
 
 ```yaml
-chapters_planned: [1, 2, 3, 7]
-chapters_handed_to_scribe: [1, 2, 3, 7]
+chapters_with_constraints: [1, 2, 3, 7]
+bible_locked: true
 ```
 
 ---
@@ -316,9 +386,14 @@ chapters_handed_to_scribe: [1, 2, 3, 7]
 ### Step 2: Scribe Writes
 
 **Scribe reads:**
+- `chapters/ch07/constraints.yaml` (the constraints)
 - `story_bible.yaml` (for consistency)
-- `chapters/ch07/beats.yaml` (the instructions)
-- `artifacts/tension_curve.yaml` (target: 6/10)
+- `chapters/ch06/draft.md` (previous chapter for continuity)
+
+**Scribe decides:**
+- What events happen in this chapter (creative freedom)
+- How to hit tension target of 6
+- How to plant allowed breadcrumbs subtly
 
 **Scribe writes:** `chapters/ch07/draft.md`
 
@@ -331,12 +406,15 @@ draft_version: 1
 
 ---
 
-### Step 3: Critic Evaluates
+### Step 3: Critic Evaluates (Blind)
 
 **Critic reads:**
-- `chapters/ch07/draft.md` (the prose)
-- `chapters/ch07/beats.yaml` (what was intended)
-- **NOT** `story_bible.yaml` (reads as naive reader)
+- `chapters/ch07/draft.md` (prose only)
+
+**Critic does NOT see:**
+- `story_bible.yaml`
+- `disclosure_schedule.yaml`
+- `chapters/ch07/constraints.yaml`
 
 **Critic produces:** `chapters/ch07/feedback.json`
 
@@ -348,7 +426,6 @@ draft_version: 1
     "burning_questions": [...]
   },
   "tension": {
-    "target": 6,
     "actual": 5,
     "diagnosis": "Stakes deflated in scene 2"
   },
@@ -406,9 +483,11 @@ preserved_spans:
 ### Step 5: Keeper Verifies
 
 **Keeper reads:**
-- `story_bible.yaml` (disclosure schedule)
+- `story_bible.yaml` (objective reality)
+- `disclosure_schedule.yaml` (when facts should be revealed)
+- `chapters/ch07/constraints.yaml` (withheld lists, tension target)
 - `chapters/ch07/draft.md` (v2)
-- `chapters/ch07/feedback.json` (preserved spans)
+- `chapters/ch07/feedback.json` (preserved spans, Critic's tension assessment)
 
 **Checks:**
 
@@ -416,7 +495,11 @@ preserved_spans:
    - Scans for facts withheld until ch 17+
    - Confirms no explicit revelations
 
-2. **Revision integrity**
+2. **Tension verification**
+   - Target: 6, Actual: 5 (from Critic)
+   - Variance: 1 → PASS (within acceptable range)
+
+3. **Revision integrity**
    - Verifies preserved spans intact
    - Checks no new leakage introduced
    - Confirms constraints met
@@ -427,6 +510,12 @@ preserved_spans:
 {
   "passed": true,
   "information_discipline": {"status": "pass"},
+  "tension_verification": {
+    "target": 6,
+    "actual": 5,
+    "variance": 1,
+    "status": "pass"
+  },
   "revision_integrity": {"status": "pass"},
   "constraints": {"status": "pass"},
   "cleared": true,
@@ -448,7 +537,7 @@ verification_history:
 
 ### Step 6: Next Chapter
 
-**Architect** creates `chapters/ch08/beats.yaml` and cycle repeats.
+**Architect** creates `chapters/ch08/constraints.yaml` and cycle repeats.
 
 ---
 
@@ -458,12 +547,12 @@ Agents communicate through **state files** and **artifact files**, not direct me
 
 ### Architect → Scribe
 
-**Via:** `chapters/chXX/beats.yaml`
+**Via:** `chapters/chXX/constraints.yaml`
 
-Architect provides beat sheet with:
-- What happens (plot)
-- What's withheld (constraints)
-- Target tension
+Architect provides constraints:
+- Withheld list (hard constraint: don't reveal these)
+- Tension target (constraint: hit this level)
+- Allowed breadcrumbs (what CAN be shown)
 
 ### Scribe → Critic
 
@@ -476,8 +565,8 @@ Scribe provides draft for evaluation.
 **Via:** `chapters/chXX/feedback.json`
 
 Critic provides:
-- Reader state
-- Tension assessment
+- Reader state (what reader knows/suspects/wonders)
+- Tension assessment (actual felt tension)
 - Prioritized issues
 - Preserved spans
 
@@ -500,41 +589,50 @@ Keeper provides:
 
 ## Key Innovations
 
-### 1. Information as First-Class Architectural Concern
+### 1. Constraints Over Creative Direction
 
-Traditional beat sheet:
-```
-Scene 3: Marcus visits grave, feels guilty
-```
-
-This system:
+**Old approach (removed):**
 ```yaml
-beat_3:
-  plot: "Marcus visits grave at 3 AM"
-  reader_learns: "Marcus feels intense guilt"
-  reader_suspects: "Marcus may be involved"
-  withheld: "That he actually killed her"
+# Beat sheet told Scribe HOW to write
+beats:
+  - description: "Marcus retrieves hidden box"
+    pacing: "slow, building tension"
+    end_on: "Pulls out photograph - revelation"
 ```
 
-**Information function is separate from plot function.**
+**New approach:**
+```yaml
+# Constraints tell Scribe WHAT to hide and WHAT tension to hit
+withheld:
+  - "That Marcus killed Elena"
+  - "That photo shows sibling relationship"
+allowed_breadcrumbs:
+  - "Marcus has childhood photo with Elena"
+tension_target: 6
+```
+
+Scribe decides HOW to create a compelling chapter within these constraints.
 
 ### 2. Enforced Separation of Knowledge States
 
-**Architect** knows everything (designs objective reality).
+**Architect** knows everything (designs constraints).
 
-**Scribe** knows what characters know (writes their POV).
+**Scribe** knows what's withheld (follows constraints).
 
-**Critic** (as reader) only knows what text has shown.
+**Critic** only knows what text has shown (evaluates blindly).
 
-**Keeper** knows everything (verifies against objective reality).
+**Keeper** knows everything (verifies against constraints).
 
 This prevents knowledge contamination.
 
-### 3. Automated Verification
+### 3. Automated Constraint Verification
 
-**Keeper** programmatically checks disclosure schedule against draft.
+**Keeper** programmatically checks:
+- Disclosure schedule against draft (leakage?)
+- Withheld lists against draft (violations?)
+- Tension target vs. Critic's assessment (missed target?)
 
-This catches leakage that humans might miss (especially after multiple drafts).
+This catches violations that humans might miss.
 
 ### 4. Preserved Spans as Inviolable Artifacts
 
@@ -544,16 +642,22 @@ Revision can happen around it, but the preserved span itself is sacred.
 
 This protects voice and strong writing from death-by-revision.
 
+### 5. Blind Evaluation
+
+Critic never sees story architecture - only prose.
+
+This ensures feedback models actual reader experience, not biased by "I know what's coming."
+
 ---
 
 ## Design Principles
 
 ### 1. Each Agent Has One Job
 
-**Architect:** Design
-**Scribe:** Write
-**Critic:** Evaluate
-**Keeper:** Verify
+**Architect:** Design constraints
+**Scribe:** Write within constraints
+**Critic:** Evaluate blindly
+**Keeper:** Verify against constraints
 
 No overlap. No confusion.
 
@@ -570,7 +674,7 @@ This makes the system auditable and resumable.
 
 Agents don't "talk" to each other.
 
-They produce artifacts (beat sheets, drafts, feedback, verification) that the next agent reads.
+They produce artifacts (constraints, drafts, feedback, verification) that the next agent reads.
 
 This makes the workflow clear and debuggable.
 
@@ -581,6 +685,16 @@ Once locked, it's the source of truth.
 All agents are bound by it.
 
 Changes require project-wide re-evaluation.
+
+### 5. Creative Freedom Within Constraints
+
+Scribe has full creative control WITHIN constraints.
+
+Architect tells WHAT to hide and WHAT tension to hit.
+
+Scribe decides HOW to write a compelling chapter.
+
+This balance prevents both over-prescription and under-constraint.
 
 ---
 
@@ -606,27 +720,29 @@ Changes require project-wide re-evaluation.
 
 1. **Architect** creates `story_bible.yaml`:
    - Define objective reality
-   - Schedule when facts are disclosed
    - Map character knowledge
 
-2. **Architect** creates `artifacts/tension_curve.yaml`:
+2. **Architect** creates `disclosure_schedule.yaml`:
+   - Schedule when facts are disclosed (for Keeper verification)
+
+3. **Architect** creates `artifacts/tension_targets.yaml`:
    - Set tension targets per chapter
 
-3. **Architect** creates first beat sheet:
-   - `chapters/ch01/beats.yaml`
+4. **Architect** creates first constraints:
+   - `chapters/ch01/constraints.yaml` (withheld lists, tension target)
 
-4. **Scribe** writes first draft:
+5. **Scribe** writes first draft:
    - `chapters/ch01/draft.md`
 
-5. **Critic** evaluates:
+6. **Critic** evaluates:
    - `chapters/ch01/feedback.json`
 
-6. **Scribe** revises
+7. **Scribe** revises
 
-7. **Keeper** verifies:
+8. **Keeper** verifies:
    - `chapters/ch01/verification.json`
 
-8. If passed → Architect plans Chapter 2
+9. If passed → Architect creates constraints for Chapter 2
 
 ### Detailed Workflow
 
@@ -647,9 +763,9 @@ The author controls:
 
 This system gives you the tools to control that uncertainty with precision.
 
-Not by writing better prose (though that helps).
+Not by prescribing every beat (removed).
 
-By **architecting information disclosure** as a first-class concern.
+By **defining constraints** and letting creativity fill the space within them.
 
 ---
 
@@ -662,7 +778,7 @@ By **architecting information disclosure** as a first-class concern.
 
 Also: Russian Formalists distinguished **fabula** (raw events) from **syuzhet** (how story is told).
 
-This system is syuzhet made operational.
+This system is syuzhet made operational through constraints.
 
 ---
 
@@ -673,8 +789,8 @@ This system is syuzhet made operational.
 - `QUICKSTART.md` - 5-step getting started
 - `agents/*/CLAUDE.md` - Individual agent instructions
 - `story_bible.yaml` - Example story with disclosure schedule
-- `tension_curve.yaml` - Example tension curve
+- `tension_targets.yaml` - Example tension targets
 
 ---
 
-**Welcome to Loom. Let's weave some suspense.**
+**Welcome to Loom. Let's weave some suspense with constraints, not prescriptions.**
