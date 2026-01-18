@@ -439,6 +439,97 @@ Rules:
     };
 
     // ============================================
+    // PROJECT UTILITIES
+    // ============================================
+    const generateProjectId = () => `project_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const createProjectFromRepo = (owner, repo, branch = 'main') => ({
+      id: `${owner}/${repo}`,
+      name: repo,
+      type: 'github',
+      github: {
+        owner,
+        repo,
+        branch,
+        fileMapping: {},
+        fileSHAs: {},
+        lastSync: null
+      },
+      storyBible: '',
+      tensionCurve: '',
+      disclosures: '',
+      chapters: {},
+      customPrompts: {},
+      referenceLibrary: {},
+      chats: {},
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    
+    const createLocalProject = (name = 'Untitled Project') => ({
+      id: generateProjectId(),
+      name,
+      type: 'local',
+      github: null,
+      storyBible: '',
+      tensionCurve: '',
+      disclosures: '',
+      chapters: {},
+      customPrompts: {},
+      referenceLibrary: {},
+      chats: {},
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    
+    // Migrate old data to a local project (for existing users)
+    const migrateOldData = () => {
+      // Check if already migrated
+      if (Storage.get('projects_migrated')) return null;
+      
+      // Check if there's old data to migrate
+      const oldChats = Storage.get('chats');
+      const oldBible = Storage.get('story_bible');
+      const oldCurve = Storage.get('tension_curve');
+      const oldDisclosures = Storage.get('disclosures');
+      const oldChapters = Storage.get('chapters');
+      const oldPrompts = Storage.get('custom_prompts');
+      const oldRefs = Storage.get('reference_library');
+      const oldGithub = Storage.get('github_config');
+      
+      const hasOldData = oldChats || oldBible || oldCurve || oldDisclosures || oldChapters || oldPrompts || oldRefs;
+      
+      if (!hasOldData) {
+        Storage.set('projects_migrated', true);
+        return null;
+      }
+      
+      // Create a project from old data
+      let project;
+      if (oldGithub && oldGithub.owner && oldGithub.repo) {
+        project = createProjectFromRepo(oldGithub.owner, oldGithub.repo, oldGithub.branch || 'main');
+        project.github.token = oldGithub.token;
+        project.github.fileMapping = oldGithub.fileMapping || {};
+        project.github.fileSHAs = oldGithub.fileSHAs || {};
+        project.github.lastSync = oldGithub.lastSync;
+      } else {
+        project = createLocalProject('Migrated Project');
+      }
+      
+      project.storyBible = oldBible || '';
+      project.tensionCurve = oldCurve || '';
+      project.disclosures = oldDisclosures || '';
+      project.chapters = oldChapters || {};
+      project.customPrompts = oldPrompts || {};
+      project.referenceLibrary = oldRefs || {};
+      project.chats = oldChats || {};
+      
+      Storage.set('projects_migrated', true);
+      
+      return project;
+    };
+
+    // ============================================
     // THEME DEFINITIONS
     // ============================================
     const THEMES = {
@@ -484,6 +575,224 @@ Rules:
               {theme.icon}
             </button>
           ))}
+        </div>
+      );
+    }
+
+    // ============================================
+    // PROJECT SWITCHER COMPONENT
+    // ============================================
+    function ProjectSwitcher({ 
+      projects, 
+      currentProjectId, 
+      onSwitch, 
+      onCreate, 
+      onDelete, 
+      onRename,
+      onImportFromGitHub,
+      isOpen,
+      onToggle 
+    }) {
+      const [editingId, setEditingId] = useState(null);
+      const [editName, setEditName] = useState('');
+      const [showNewProject, setShowNewProject] = useState(false);
+      const [newProjectName, setNewProjectName] = useState('');
+      
+      const projectList = Object.values(projects).sort((a, b) => b.updatedAt - a.updatedAt);
+      const currentProject = projects[currentProjectId];
+      
+      const handleStartRename = (project) => {
+        setEditingId(project.id);
+        setEditName(project.name);
+      };
+      
+      const handleFinishRename = () => {
+        if (editingId && editName.trim()) {
+          onRename(editingId, editName.trim());
+        }
+        setEditingId(null);
+        setEditName('');
+      };
+      
+      const handleCreateProject = () => {
+        if (newProjectName.trim()) {
+          onCreate(newProjectName.trim());
+          setNewProjectName('');
+          setShowNewProject(false);
+        }
+      };
+      
+      return (
+        <div className="relative" onClick={(e) => e.stopPropagation()}>
+          {/* Current Project Button */}
+          <button
+            onClick={onToggle}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-left"
+            style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' }}
+          >
+            <span className="text-lg">
+              {currentProject?.type === 'github' ? '📁' : '📝'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                {currentProject?.name || 'No Project'}
+              </div>
+              <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                {currentProject?.type === 'github' 
+                  ? `${currentProject.github?.owner}/${currentProject.github?.repo}`
+                  : 'Local project'}
+              </div>
+            </div>
+            <span style={{ color: 'var(--text-muted)' }}>
+              {isOpen ? '▲' : '▼'}
+            </span>
+          </button>
+          
+          {/* Dropdown */}
+          {isOpen && (
+            <div 
+              className="absolute top-full left-0 right-0 mt-1 rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto scrollbar-thin"
+              style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+            >
+              {/* Project List */}
+              <div className="p-2">
+                <p className="text-xs uppercase tracking-wider px-2 py-1" style={{ color: 'var(--text-muted)' }}>
+                  Projects ({projectList.length})
+                </p>
+                {projectList.map(project => (
+                  <div
+                    key={project.id}
+                    className={`group flex items-center gap-2 px-2 py-2 rounded transition-colors ${
+                      project.id === currentProjectId ? '' : 'cursor-pointer'
+                    }`}
+                    style={{
+                      backgroundColor: project.id === currentProjectId ? 'rgba(201, 162, 39, 0.15)' : 'transparent'
+                    }}
+                    onClick={() => {
+                      if (project.id !== currentProjectId && editingId !== project.id) {
+                        onSwitch(project.id);
+                        onToggle();
+                      }
+                    }}
+                  >
+                    <span className="text-sm">
+                      {project.type === 'github' ? '📁' : '📝'}
+                    </span>
+                    
+                    {editingId === project.id ? (
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onBlur={handleFinishRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleFinishRename();
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        className="flex-1 px-2 py-0.5 rounded text-sm"
+                        style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm truncate" style={{ 
+                          color: project.id === currentProjectId ? 'var(--accent-gold)' : 'var(--text-primary)' 
+                        }}>
+                          {project.name}
+                        </div>
+                        <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                          {project.type === 'github' 
+                            ? `${project.github?.owner}/${project.github?.repo}`
+                            : `${Object.keys(project.chapters || {}).length} chapters`}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Actions */}
+                    {editingId !== project.id && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleStartRename(project);
+                          }}
+                          className="p-1 rounded text-xs"
+                          style={{ color: 'var(--text-muted)' }}
+                          title="Rename"
+                        >
+                          ✎
+                        </button>
+                        {projectList.length > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Delete "${project.name}"? This cannot be undone.`)) {
+                                onDelete(project.id);
+                              }
+                            }}
+                            className="p-1 rounded text-xs"
+                            style={{ color: 'var(--accent-crimson)' }}
+                            title="Delete"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Actions */}
+              <div className="p-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
+                {showNewProject ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCreateProject();
+                        if (e.key === 'Escape') setShowNewProject(false);
+                      }}
+                      placeholder="Project name"
+                      className="flex-1 px-2 py-1.5 rounded text-sm"
+                      style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleCreateProject}
+                      className="px-3 py-1.5 rounded text-sm"
+                      style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                    >
+                      Create
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowNewProject(true)}
+                      className="flex-1 py-2 rounded text-sm transition-colors"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      + New Local Project
+                    </button>
+                    <button
+                      onClick={() => {
+                        onToggle();
+                        onImportFromGitHub();
+                      }}
+                      className="flex-1 py-2 rounded text-sm transition-colors"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      📥 Import from GitHub
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -841,7 +1150,7 @@ Please output ONLY the missing YAML sections now.`;
     // MAIN APP
     // ============================================
     function App() {
-      // API Keys (one per provider)
+      // API Keys (one per provider) - global, not per-project
       const [apiKeys, setApiKeys] = useState({
         anthropic: '',
         openai: '',
@@ -850,37 +1159,47 @@ Please output ONLY the missing YAML sections now.`;
       });
       const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929');
       
-      // Theme state
+      // Theme state - global
       const [theme, setTheme] = useState('dark');
+      
+      // Verifier model - global
+      const [verifierModel, setVerifierModel] = useState('claude-sonnet-4-5-20250929');
+      
+      // GitHub token - global (shared across projects)
+      const [githubToken, setGithubToken] = useState('');
+      
+      // Project state
+      const [projects, setProjects] = useState({});
+      const [currentProjectId, setCurrentProjectId] = useState(null);
+      const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
       
       // App state
       const [currentAgent, setCurrentAgent] = useState('architect');
       const [currentChatId, setCurrentChatId] = useState(null);
-      const [chats, setChats] = useState({});
-      const [storyBible, setStoryBible] = useState('');
-      const [tensionCurve, setTensionCurve] = useState('');
-      const [disclosures, setDisclosures] = useState('');
-      const [chapters, setChapters] = useState({});
-      const [customPrompts, setCustomPrompts] = useState({});
-      const [view, setView] = useState('chat'); // chat, bible, chapters, settings, github
+      const [view, setView] = useState('chat');
       const [isLoading, setIsLoading] = useState(false);
       
       // Verification state (for Architect)
       const [verificationResult, setVerificationResult] = useState(null);
-      const [verifierModel, setVerifierModel] = useState('claude-sonnet-4-5-20250929'); // model for verification/completion passes
       
-      // GitHub state
-      const [githubConfig, setGithubConfig] = useState({
-        token: '',
-        owner: '',
-        repo: '',
-        branch: 'main',
-        fileMapping: {},    // { 'path/to/file.md': { type: 'chapter', chapterNum: 1 } }
-        fileSHAs: {},       // { 'path/to/file.md': 'sha...' } for updates
-        lastSync: null
-      });
-      const [referenceLibrary, setReferenceLibrary] = useState({});  // { id: { label, content, path } }
-      const [githubModal, setGithubModal] = useState(null);  // null, 'import', 'push'
+      // GitHub modal state
+      const [githubModal, setGithubModal] = useState(null);
+
+      // Get current project
+      const currentProject = currentProjectId ? projects[currentProjectId] : null;
+      
+      // Derived state from current project
+      const chats = currentProject?.chats || {};
+      const storyBible = currentProject?.storyBible || '';
+      const tensionCurve = currentProject?.tensionCurve || '';
+      const disclosures = currentProject?.disclosures || '';
+      const chapters = currentProject?.chapters || {};
+      const customPrompts = currentProject?.customPrompts || {};
+      const referenceLibrary = currentProject?.referenceLibrary || {};
+      const githubConfig = currentProject?.github ? {
+        ...currentProject.github,
+        token: githubToken // Use global token
+      } : null;
 
       // Apply theme to document
       useEffect(() => {
@@ -898,9 +1217,84 @@ Please output ONLY the missing YAML sections now.`;
         setVerifierModel(model);
         Storage.set('verifier_model', model);
       };
+      
+      // Save GitHub token
+      const saveGithubToken = (token) => {
+        setGithubToken(token);
+        Storage.set('github_token', token);
+      };
+      
+      // Update current project
+      const updateCurrentProject = (updates) => {
+        if (!currentProjectId) return;
+        setProjects(prev => {
+          const updated = {
+            ...prev,
+            [currentProjectId]: {
+              ...prev[currentProjectId],
+              ...updates,
+              updatedAt: Date.now()
+            }
+          };
+          Storage.set('projects', updated);
+          return updated;
+        });
+      };
+      
+      // Save projects
+      const saveProjects = (newProjects) => {
+        setProjects(newProjects);
+        Storage.set('projects', newProjects);
+      };
+      
+      // Switch to project
+      const switchToProject = (projectId) => {
+        setCurrentProjectId(projectId);
+        setCurrentChatId(null);
+        setVerificationResult(null);
+        Storage.set('current_project_id', projectId);
+      };
+      
+      // Create new local project
+      const createNewLocalProject = (name = 'Untitled Project') => {
+        const project = createLocalProject(name);
+        const updated = { ...projects, [project.id]: project };
+        saveProjects(updated);
+        switchToProject(project.id);
+        return project;
+      };
+      
+      // Delete project
+      const deleteProject = (projectId) => {
+        const { [projectId]: removed, ...rest } = projects;
+        saveProjects(rest);
+        if (currentProjectId === projectId) {
+          const remaining = Object.keys(rest);
+          if (remaining.length > 0) {
+            switchToProject(remaining[0]);
+          } else {
+            // Create a new local project if none left
+            createNewLocalProject();
+          }
+        }
+      };
+      
+      // Rename project
+      const renameProject = (projectId, newName) => {
+        if (!projects[projectId]) return;
+        setProjects(prev => {
+          const updated = {
+            ...prev,
+            [projectId]: { ...prev[projectId], name: newName, updatedAt: Date.now() }
+          };
+          Storage.set('projects', updated);
+          return updated;
+        });
+      };
 
       // Load initial state
       useEffect(() => {
+        // Load global settings
         const savedTheme = Storage.get('theme');
         if (savedTheme && THEMES[savedTheme]) setTheme(savedTheme);
         
@@ -913,29 +1307,35 @@ Please output ONLY the missing YAML sections now.`;
         const savedVerifierModel = Storage.get('verifier_model');
         if (savedVerifierModel && MODELS[savedVerifierModel]) setVerifierModel(savedVerifierModel);
         
-        const savedChats = Storage.get('chats') || {};
-        setChats(savedChats);
+        const savedToken = Storage.get('github_token') || '';
+        setGithubToken(savedToken);
         
-        const savedBible = Storage.get('story_bible') || '';
-        setStoryBible(savedBible);
+        // Load projects
+        let loadedProjects = Storage.get('projects') || {};
         
-        const savedCurve = Storage.get('tension_curve') || '';
-        setTensionCurve(savedCurve);
+        // Migrate old data if needed
+        const migratedProject = migrateOldData();
+        if (migratedProject) {
+          loadedProjects = { ...loadedProjects, [migratedProject.id]: migratedProject };
+          Storage.set('projects', loadedProjects);
+        }
         
-        const savedDisclosures = Storage.get('disclosures') || '';
-        setDisclosures(savedDisclosures);
+        // If no projects exist, create a local one
+        if (Object.keys(loadedProjects).length === 0) {
+          const newProject = createLocalProject('My First Project');
+          loadedProjects = { [newProject.id]: newProject };
+          Storage.set('projects', loadedProjects);
+        }
         
-        const savedChapters = Storage.get('chapters') || {};
-        setChapters(savedChapters);
+        setProjects(loadedProjects);
         
-        const savedPrompts = Storage.get('custom_prompts') || {};
-        setCustomPrompts(savedPrompts);
-        
-        const savedGithub = Storage.get('github_config');
-        if (savedGithub) setGithubConfig(savedGithub);
-        
-        const savedRefs = Storage.get('reference_library') || {};
-        setReferenceLibrary(savedRefs);
+        // Load current project ID
+        let savedProjectId = Storage.get('current_project_id');
+        if (!savedProjectId || !loadedProjects[savedProjectId]) {
+          savedProjectId = Object.keys(loadedProjects)[0];
+          Storage.set('current_project_id', savedProjectId);
+        }
+        setCurrentProjectId(savedProjectId);
       }, []);
 
       // Get current provider
@@ -950,16 +1350,19 @@ Please output ONLY the missing YAML sections now.`;
         Storage.set('api_keys', updated);
       };
       
-      // Save GitHub config
+      // Save GitHub config (project-specific)
       const saveGithubConfig = (config) => {
-        setGithubConfig(config);
-        Storage.set('github_config', config);
+        if (!currentProjectId) return;
+        const { token, ...configWithoutToken } = config;
+        // Save token globally
+        if (token) saveGithubToken(token);
+        // Save config to project
+        updateCurrentProject({ github: configWithoutToken });
       };
       
-      // Save reference library
+      // Save reference library (project-specific)
       const saveReferenceLibrary = (refs) => {
-        setReferenceLibrary(refs);
-        Storage.set('reference_library', refs);
+        updateCurrentProject({ referenceLibrary: refs });
       };
 
       // Save selected model
@@ -968,19 +1371,17 @@ Please output ONLY the missing YAML sections now.`;
         Storage.set('selected_model', model);
       };
 
-      // Save custom prompt for an agent
+      // Save custom prompt for an agent (project-specific)
       const saveCustomPrompt = (agentId, prompt) => {
         const updated = { ...customPrompts, [agentId]: prompt };
-        setCustomPrompts(updated);
-        Storage.set('custom_prompts', updated);
+        updateCurrentProject({ customPrompts: updated });
       };
       
-      // Reset prompt to default
+      // Reset prompt to default (project-specific)
       const resetPrompt = (agentId) => {
         const updated = { ...customPrompts };
         delete updated[agentId];
-        setCustomPrompts(updated);
-        Storage.set('custom_prompts', updated);
+        updateCurrentProject({ customPrompts: updated });
       };
       
       // Get effective prompt (custom or default)
@@ -988,8 +1389,9 @@ Please output ONLY the missing YAML sections now.`;
         return customPrompts[agentId] || AGENTS[agentId].systemPrompt;
       };
 
-      // Create new chat
+      // Create new chat (project-specific)
       const createChat = (agentId) => {
+        if (!currentProjectId) return null;
         const chatId = `${agentId}_${Date.now()}`;
         const newChat = {
           id: chatId,
@@ -1000,8 +1402,7 @@ Please output ONLY the missing YAML sections now.`;
           updatedAt: Date.now()
         };
         const updated = { ...chats, [chatId]: newChat };
-        setChats(updated);
-        Storage.set('chats', updated);
+        updateCurrentProject({ chats: updated });
         setCurrentChatId(chatId);
         setCurrentAgent(agentId);
         return chatId;
@@ -1034,11 +1435,12 @@ Please output ONLY the missing YAML sections now.`;
         return context;
       };
 
-      // Send message
+      // Send message (project-specific chats)
       const sendMessage = async (content) => {
-        if (!hasValidKey || !currentChatId) return;
+        if (!hasValidKey || !currentChatId || !currentProjectId) return;
         
         const chat = chats[currentChatId];
+        if (!chat) return;
         const agent = AGENTS[chat.agentId];
         
         // Add user message
@@ -1053,8 +1455,7 @@ Please output ONLY the missing YAML sections now.`;
           title: chat.messages.length === 0 ? content.slice(0, 50) + '...' : chat.title
         };
         const updatedChats = { ...chats, [currentChatId]: updatedChat };
-        setChats(updatedChats);
-        Storage.set('chats', updatedChats);
+        updateCurrentProject({ chats: updatedChats });
         
         setIsLoading(true);
         
@@ -1088,15 +1489,14 @@ Please output ONLY the missing YAML sections now.`;
             updatedAt: Date.now()
           };
           const finalChats = { ...chats, [currentChatId]: finalChat };
-          setChats(finalChats);
-          Storage.set('chats', finalChats);
+          updateCurrentProject({ chats: finalChats });
           
         } catch (error) {
           console.error('API Error:', error);
           const errorMessage = { role: 'assistant', content: `Error: ${error.message}`, timestamp: Date.now(), isError: true };
           const errorMessages = [...updatedMessages, errorMessage];
           const errorChat = { ...updatedChat, messages: errorMessages };
-          setChats({ ...chats, [currentChatId]: errorChat });
+          updateCurrentProject({ chats: { ...chats, [currentChatId]: errorChat } });
         }
         
         setIsLoading(false);
@@ -1137,46 +1537,41 @@ Please output ONLY the missing YAML sections now.`;
         setVerificationResult(null); // Clear after sending
       };
 
-      // Delete chat
+      // Delete chat (project-specific)
       const deleteChat = (chatId) => {
         const { [chatId]: removed, ...rest } = chats;
-        setChats(rest);
-        Storage.set('chats', rest);
+        updateCurrentProject({ chats: rest });
         if (currentChatId === chatId) {
           setCurrentChatId(null);
         }
       };
 
-      // Save story bible
+      // Save story bible (project-specific)
       const saveStoryBible = (content) => {
-        setStoryBible(content);
-        Storage.set('story_bible', content);
+        updateCurrentProject({ storyBible: content });
       };
 
-      // Save tension curve
+      // Save tension curve (project-specific)
       const saveTensionCurve = (content) => {
-        setTensionCurve(content);
-        Storage.set('tension_curve', content);
+        updateCurrentProject({ tensionCurve: content });
       };
       
-      // Save disclosures
+      // Save disclosures (project-specific)
       const saveDisclosures = (content) => {
-        setDisclosures(content);
-        Storage.set('disclosures', content);
+        updateCurrentProject({ disclosures: content });
       };
 
-      // Save chapter
+      // Save chapter (project-specific)
       const saveChapter = (num, data) => {
         const updated = { ...chapters, [num]: { ...chapters[num], ...data } };
-        setChapters(updated);
-        Storage.set('chapters', updated);
+        updateCurrentProject({ chapters: updated });
       };
       
+      // Delete chapter (project-specific)
       const deleteChapter = (num) => {
         const updated = { ...chapters };
         delete updated[num];
-        setChapters(updated);
-        Storage.set('chapters', updated);
+        updateCurrentProject({ chapters: updated });
       };
 
       // Check if any API key is set
@@ -1190,9 +1585,16 @@ Please output ONLY the missing YAML sections now.`;
       const agentChats = Object.values(chats).filter(c => c.agentId === currentAgent).sort((a, b) => b.updatedAt - a.updatedAt);
       const currentChat = currentChatId ? chats[currentChatId] : null;
 
+      // Close project switcher when clicking outside
+      const handleMainClick = () => {
+        if (projectSwitcherOpen) {
+          setProjectSwitcherOpen(false);
+        }
+      };
+
       return (
       <React.Fragment>
-        <div className="min-h-screen flex" style={{ backgroundColor: 'var(--bg-primary)' }}>
+        <div className="min-h-screen flex" style={{ backgroundColor: 'var(--bg-primary)' }} onClick={handleMainClick}>
           {/* Sidebar */}
           <div className="w-64 flex flex-col" style={{ backgroundColor: 'var(--bg-primary)', borderRight: '1px solid var(--border-color)' }}>
             {/* Logo + Theme Toggle */}
@@ -1209,6 +1611,22 @@ Please output ONLY the missing YAML sections now.`;
               <ThemeToggle currentTheme={theme} onThemeChange={saveTheme} />
             </div>
             
+            {/* Project Switcher */}
+            <div className="p-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Project</p>
+              <ProjectSwitcher
+                projects={projects}
+                currentProjectId={currentProjectId}
+                onSwitch={switchToProject}
+                onCreate={createNewLocalProject}
+                onDelete={deleteProject}
+                onRename={renameProject}
+                onImportFromGitHub={() => setGithubModal('import')}
+                isOpen={projectSwitcherOpen}
+                onToggle={() => setProjectSwitcherOpen(!projectSwitcherOpen)}
+              />
+            </div>
+            
             {/* Navigation */}
             <div className="p-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
               <div className="flex gap-1 flex-wrap">
@@ -1223,7 +1641,7 @@ Please output ONLY the missing YAML sections now.`;
                 ].map(tab => (
                   <button
                     key={tab.id}
-                    onClick={() => setView(tab.id)}
+                    onClick={() => { setView(tab.id); setProjectSwitcherOpen(false); }}
                     className="flex-1 py-2 text-xs font-body rounded transition-colors"
                     style={{
                       backgroundColor: view === tab.id ? 'rgba(201,162,39,0.2)' : 'transparent',
@@ -1236,28 +1654,29 @@ Please output ONLY the missing YAML sections now.`;
                 ))}
               </div>
               
-              {/* GitHub Quick Actions */}
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => setGithubModal('import')}
-                  className="flex-1 py-1.5 text-xs font-body rounded transition-colors"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-                >
-                  {githubConfig.repo ? '📥 Sync' : '📥 Import'}
-                </button>
-                <button
-                  onClick={() => setGithubModal('push')}
-                  disabled={!githubConfig.repo}
-                  className="flex-1 py-1.5 text-xs font-body rounded transition-colors disabled:opacity-40"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
-                >
-                  📤 Push
-                </button>
-              </div>
-              {githubConfig.repo && (
-                <p className="text-xs mt-2 truncate" style={{ color: 'var(--text-muted)' }}>
-                  {githubConfig.owner}/{githubConfig.repo}
-                </p>
+              {/* GitHub Quick Actions - only show if current project is github type */}
+              {currentProject?.type === 'github' && (
+                <>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => setGithubModal('import')}
+                      className="flex-1 py-1.5 text-xs font-body rounded transition-colors"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                    >
+                      📥 Sync
+                    </button>
+                    <button
+                      onClick={() => setGithubModal('push')}
+                      className="flex-1 py-1.5 text-xs font-body rounded transition-colors"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                    >
+                      📤 Push
+                    </button>
+                  </div>
+                  <p className="text-xs mt-2 truncate" style={{ color: 'var(--text-muted)' }}>
+                    {currentProject.github?.owner}/{currentProject.github?.repo}
+                  </p>
+                </>
               )}
             </div>
             
@@ -1379,7 +1798,7 @@ Please output ONLY the missing YAML sections now.`;
           
           {/* Main content */}
           <div className="flex-1 flex flex-col">
-            {view === 'chat' && (
+            {view === 'chat' && currentProject && (
               <>
                 {/* Agent header */}
                 <div className="p-6" style={{ borderBottom: '1px solid var(--border-color)' }}>
@@ -1438,7 +1857,7 @@ Please output ONLY the missing YAML sections now.`;
               </>
             )}
             
-            {view === 'bible' && (
+            {view === 'bible' && currentProject && (
               <StoryBibleEditor
                 storyBible={storyBible}
                 tensionCurve={tensionCurve}
@@ -1449,7 +1868,7 @@ Please output ONLY the missing YAML sections now.`;
               />
             )}
             
-            {view === 'viz' && (
+            {view === 'viz' && currentProject && (
               <VisualizationPanel
                 storyBible={storyBible}
                 tensionCurve={tensionCurve}
@@ -1460,7 +1879,7 @@ Please output ONLY the missing YAML sections now.`;
               />
             )}
             
-            {view === 'chapters' && (
+            {view === 'chapters' && currentProject && (
               <ChapterManager
                 chapters={chapters}
                 onSaveChapter={saveChapter}
@@ -1472,10 +1891,37 @@ Please output ONLY the missing YAML sections now.`;
               />
             )}
             
-            {view === 'stats' && (
+            {view === 'stats' && currentProject && (
               <WordCountPanel
                 chapters={chapters}
               />
+            )}
+            
+            {/* No project selected fallback */}
+            {!currentProject && view !== 'settings' && (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <span className="text-6xl mb-4 block">📁</span>
+                  <h2 className="font-display text-2xl mb-2" style={{ color: 'var(--text-primary)' }}>No Project Selected</h2>
+                  <p className="mb-4" style={{ color: 'var(--text-muted)' }}>Create a new project or import from GitHub to get started.</p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => createNewLocalProject()}
+                      className="px-4 py-2 rounded font-body"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      + New Local Project
+                    </button>
+                    <button
+                      onClick={() => setGithubModal('import')}
+                      className="px-4 py-2 rounded font-body"
+                      style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                    >
+                      📥 Import from GitHub
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
             
             {view === 'settings' && (
@@ -1489,10 +1935,26 @@ Please output ONLY the missing YAML sections now.`;
                 onResetPrompt={resetPrompt}
                 verifierModel={verifierModel}
                 onVerifierModelChange={saveVerifierModel}
+                githubToken={githubToken}
+                onSaveGithubToken={saveGithubToken}
+                currentProject={currentProject}
+                projects={projects}
+                onClearProjectData={() => {
+                  if (currentProjectId) {
+                    updateCurrentProject({
+                      storyBible: '',
+                      tensionCurve: '',
+                      disclosures: '',
+                      chapters: {},
+                      chats: {},
+                      referenceLibrary: {}
+                    });
+                  }
+                }}
               />
             )}
             
-            {view === 'reference' && (
+            {view === 'reference' && currentProject && (
               <ReferenceLibrary
                 references={referenceLibrary}
                 onDelete={(id) => {
@@ -1509,21 +1971,42 @@ Please output ONLY the missing YAML sections now.`;
           <GitHubImportModal
             config={githubConfig}
             chapters={chapters}
-            onImport={(newConfig, newChapters, newRefs) => {
-              saveGithubConfig(newConfig);
-              Object.entries(newChapters).forEach(([num, ch]) => saveChapter(num, ch));
-              saveReferenceLibrary({ ...referenceLibrary, ...newRefs });
+            projects={projects}
+            currentProjectId={currentProjectId}
+            githubToken={githubToken}
+            onSaveGithubToken={saveGithubToken}
+            onSwitchProject={(projectId) => {
+              switchToProject(projectId);
+            }}
+            onCreateProject={(name) => {
+              createNewLocalProject(name);
+            }}
+            onImport={(projectData, projectId, isNew) => {
+              if (isNew) {
+                // Add new project
+                const updated = { ...projects, [projectId]: projectData };
+                saveProjects(updated);
+              } else {
+                // Update existing project
+                const updated = { ...projects, [projectId]: projectData };
+                saveProjects(updated);
+              }
+              // Switch to the imported project
+              switchToProject(projectId);
             }}
             onClose={() => setGithubModal(null)}
           />
         )}
         
         {/* GitHub Push Modal */}
-        {githubModal === 'push' && (
+        {githubModal === 'push' && currentProject?.type === 'github' && (
           <GitHubPushModal
-            config={githubConfig}
+            config={{ ...currentProject.github, token: githubToken }}
             chapters={chapters}
-            onPush={(updatedConfig) => saveGithubConfig(updatedConfig)}
+            onPush={(updatedGithubConfig) => {
+              const { token, ...configWithoutToken } = updatedGithubConfig;
+              updateCurrentProject({ github: configWithoutToken });
+            }}
             onClose={() => setGithubModal(null)}
           />
         )}
@@ -1612,17 +2095,46 @@ Please output ONLY the missing YAML sections now.`;
     // ============================================
     // GITHUB IMPORT MODAL
     // ============================================
-    function GitHubImportModal({ config, chapters, onImport, onClose }) {
-      const [step, setStep] = useState(config.repo ? 'files' : 'connect'); // connect, files, importing
-      const [token, setToken] = useState(config.token || '');
-      const [repoUrl, setRepoUrl] = useState(config.repo ? `${config.owner}/${config.repo}` : '');
-      const [branch, setBranch] = useState(config.branch || 'main');
+    function GitHubImportModal({ 
+      config, 
+      chapters, 
+      onImport, 
+      onClose, 
+      projects, 
+      currentProjectId,
+      onSwitchProject,
+      onCreateProject,
+      githubToken,
+      onSaveGithubToken 
+    }) {
+      // Check if there's an existing project for the repo we might import
+      const [existingProjectId, setExistingProjectId] = useState(null);
+      
+      const [step, setStep] = useState('connect'); // connect, files, importing
+      const [token, setToken] = useState(githubToken || '');
+      const [repoUrl, setRepoUrl] = useState(config?.repo ? `${config.owner}/${config.repo}` : '');
+      const [branch, setBranch] = useState(config?.branch || 'main');
       const [error, setError] = useState('');
       const [loading, setLoading] = useState(false);
       
       const [repoTree, setRepoTree] = useState([]);
-      const [fileMapping, setFileMapping] = useState(config.fileMapping || {});
+      const [fileMapping, setFileMapping] = useState(config?.fileMapping || {});
       const [importStatus, setImportStatus] = useState({});
+      
+      // Check for existing project when repo URL changes
+      useEffect(() => {
+        const parsed = GitHubAPI.parseRepoUrl(repoUrl);
+        if (parsed) {
+          const projectId = `${parsed.owner}/${parsed.repo}`;
+          if (projects[projectId]) {
+            setExistingProjectId(projectId);
+          } else {
+            setExistingProjectId(null);
+          }
+        } else {
+          setExistingProjectId(null);
+        }
+      }, [repoUrl, projects]);
       
       // Connect to repo
       const handleConnect = async () => {
@@ -1633,6 +2145,11 @@ Please output ONLY the missing YAML sections now.`;
           return;
         }
         
+        // Save token globally
+        if (token && token !== githubToken) {
+          onSaveGithubToken(token);
+        }
+        
         setLoading(true);
         try {
           const tree = await GitHubAPI.getRepoTree(token, parsed.owner, parsed.repo, branch);
@@ -1641,11 +2158,26 @@ Please output ONLY the missing YAML sections now.`;
             /\.(md|txt|yaml|yml|json)$/i.test(f.path) && !f.path.startsWith('.')
           );
           setRepoTree(textFiles);
+          
+          // If there's an existing project for this repo, load its file mapping
+          const projectId = `${parsed.owner}/${parsed.repo}`;
+          if (projects[projectId]?.github?.fileMapping) {
+            setFileMapping(projects[projectId].github.fileMapping);
+          }
+          
           setStep('files');
         } catch (err) {
           setError(err.message);
         }
         setLoading(false);
+      };
+      
+      // Switch to existing project
+      const handleSwitchToExisting = () => {
+        if (existingProjectId) {
+          onSwitchProject(existingProjectId);
+          onClose();
+        }
       };
       
       // Update file mapping
@@ -1663,8 +2195,13 @@ Please output ONLY the missing YAML sections now.`;
       
       // Get next available chapter number
       const getNextChapterNum = () => {
+        // Check existing project chapters if we're re-syncing
+        const parsed = GitHubAPI.parseRepoUrl(repoUrl);
+        const projectId = parsed ? `${parsed.owner}/${parsed.repo}` : null;
+        const existingChapters = projectId && projects[projectId] ? projects[projectId].chapters : chapters;
+        
         const used = new Set([
-          ...Object.keys(chapters).map(n => parseInt(n)),
+          ...Object.keys(existingChapters).map(n => parseInt(n)),
           ...Object.values(fileMapping).filter(m => m.type === 'chapter').map(m => m.chapterNum)
         ]);
         let n = 1;
@@ -1693,9 +2230,11 @@ Please output ONLY the missing YAML sections now.`;
             if (mapping.type === 'chapter') {
               newChapters[mapping.chapterNum] = {
                 content,
+                draft: content,
                 title: path.split('/').pop().replace(/\.[^.]+$/, ''),
                 beats: '',
-                feedback: ''
+                feedback: '',
+                summary: ''
               };
             } else if (mapping.type === 'reference') {
               const id = path.replace(/[^a-zA-Z0-9]/g, '_');
@@ -1712,18 +2251,41 @@ Please output ONLY the missing YAML sections now.`;
           }
         }
         
-        // Create new config
-        const newConfig = {
-          token,
-          owner: parsed.owner,
-          repo: parsed.repo,
-          branch,
-          fileMapping,
-          fileSHAs: newSHAs,
-          lastSync: Date.now()
-        };
+        // Create or update project
+        const projectId = `${parsed.owner}/${parsed.repo}`;
+        const existingProject = projects[projectId];
         
-        onImport(newConfig, newChapters, newRefs);
+        if (existingProject) {
+          // Update existing project - merge chapters
+          const mergedChapters = { ...existingProject.chapters };
+          Object.entries(newChapters).forEach(([num, ch]) => {
+            mergedChapters[num] = { ...mergedChapters[num], ...ch };
+          });
+          
+          const updatedProject = {
+            ...existingProject,
+            github: {
+              ...existingProject.github,
+              branch,
+              fileMapping,
+              fileSHAs: { ...existingProject.github?.fileSHAs, ...newSHAs },
+              lastSync: Date.now()
+            },
+            chapters: mergedChapters,
+            referenceLibrary: { ...existingProject.referenceLibrary, ...newRefs },
+            updatedAt: Date.now()
+          };
+          onImport(updatedProject, projectId, false);
+        } else {
+          // Create new project
+          const newProject = createProjectFromRepo(parsed.owner, parsed.repo, branch);
+          newProject.github.fileMapping = fileMapping;
+          newProject.github.fileSHAs = newSHAs;
+          newProject.github.lastSync = Date.now();
+          newProject.chapters = newChapters;
+          newProject.referenceLibrary = newRefs;
+          onImport(newProject, projectId, true);
+        }
         
         // Wait a moment then close
         setTimeout(() => onClose(), 1500);
@@ -1759,8 +2321,8 @@ Please output ONLY the missing YAML sections now.`;
                     </p>
                     <ol className="text-sm space-y-2" style={{ color: 'var(--text-muted)' }}>
                       <li>1. Enter your GitHub token and repository</li>
-                      <li>2. You'll manually assign each file to a chapter or reference</li>
-                      <li>3. Chapters become editable; references are read-only</li>
+                      <li>2. Each repo becomes a separate project</li>
+                      <li>3. Chapters, chats, and settings are kept per project</li>
                       <li>4. When you push, changes go to the <code className="px-1 rounded" style={{ backgroundColor: 'var(--bg-tertiary)' }}>syuzhet</code> branch</li>
                     </ol>
                   </div>
@@ -1790,6 +2352,22 @@ Please output ONLY the missing YAML sections now.`;
                       className="w-full rounded px-3 py-2 font-mono text-sm"
                       style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
                     />
+                    
+                    {/* Show if project already exists for this repo */}
+                    {existingProjectId && (
+                      <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: 'rgba(201, 162, 39, 0.15)', border: '1px solid rgba(201, 162, 39, 0.3)' }}>
+                        <p className="text-sm mb-2" style={{ color: 'var(--accent-gold)' }}>
+                          ✓ You already have a project for this repo
+                        </p>
+                        <button
+                          onClick={handleSwitchToExisting}
+                          className="text-sm px-3 py-1.5 rounded"
+                          style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                        >
+                          Switch to "{projects[existingProjectId]?.name}"
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   <div>
@@ -1816,7 +2394,7 @@ Please output ONLY the missing YAML sections now.`;
                     className="w-full py-3 rounded font-body font-medium disabled:opacity-50"
                     style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
                   >
-                    {loading ? 'Connecting...' : 'Connect & Browse Files'}
+                    {loading ? 'Connecting...' : existingProjectId ? 'Re-sync Files' : 'Connect & Browse Files'}
                   </button>
                 </div>
               )}
@@ -2304,13 +2882,31 @@ Please output ONLY the missing YAML sections now.`;
     // ============================================
     // SETTINGS PANEL
     // ============================================
-    function SettingsPanel({ apiKeys, onSaveKey, theme, onThemeChange, customPrompts, onSavePrompt, onResetPrompt, verifierModel, onVerifierModelChange }) {
+    function SettingsPanel({ 
+      apiKeys, 
+      onSaveKey, 
+      theme, 
+      onThemeChange, 
+      customPrompts, 
+      onSavePrompt, 
+      onResetPrompt, 
+      verifierModel, 
+      onVerifierModelChange,
+      githubToken,
+      onSaveGithubToken,
+      currentProject,
+      projects,
+      onExportProject,
+      onClearProjectData
+    }) {
       const [inputs, setInputs] = useState(apiKeys);
       const [saved, setSaved] = useState({});
       const [activeSection, setActiveSection] = useState('general'); // general, agents
       const [selectedAgent, setSelectedAgent] = useState('architect');
       const [promptDraft, setPromptDraft] = useState('');
       const [promptSaved, setPromptSaved] = useState(false);
+      const [githubTokenInput, setGithubTokenInput] = useState(githubToken || '');
+      const [githubTokenSaved, setGithubTokenSaved] = useState(false);
       
       useEffect(() => {
         setInputs(apiKeys);
@@ -2554,44 +3150,137 @@ Please output ONLY the missing YAML sections now.`;
                   </div>
                 </div>
                 
+                {/* GitHub Token */}
+                <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+                  <h3 className="font-body text-lg pb-2 mb-4" style={{ color: 'var(--text-primary)' }}>GitHub Integration</h3>
+                  <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>Personal Access Token</span>
+                      {githubToken && (
+                        <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Connected</span>
+                      )}
+                    </div>
+                    <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+                      Used for all GitHub-connected projects. Needs <code className="px-1 rounded" style={{ backgroundColor: 'var(--bg-tertiary)' }}>repo</code> scope.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={githubTokenInput}
+                        onChange={(e) => setGithubTokenInput(e.target.value)}
+                        placeholder="ghp_xxxxxxxxxxxx"
+                        className="flex-1 rounded px-3 py-2 font-mono text-sm focus:outline-none"
+                        style={{ backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      />
+                      <button
+                        onClick={() => {
+                          onSaveGithubToken(githubTokenInput);
+                          setGithubTokenSaved(true);
+                          setTimeout(() => setGithubTokenSaved(false), 2000);
+                        }}
+                        className="font-body text-sm px-4 py-2 rounded transition-colors"
+                        style={{ backgroundColor: 'var(--accent-gold)', color: 'var(--bg-primary)' }}
+                      >
+                        {githubTokenSaved ? '✓' : 'Save'}
+                      </button>
+                      {githubToken && (
+                        <button
+                          onClick={() => {
+                            onSaveGithubToken('');
+                            setGithubTokenInput('');
+                          }}
+                          className="font-body text-sm px-4 py-2 rounded transition-colors"
+                          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Current Project Info */}
+                <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
+                  <h3 className="font-body text-lg pb-2 mb-4" style={{ color: 'var(--text-primary)' }}>Current Project</h3>
+                  <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-lg">
+                        {currentProject?.type === 'github' ? '📁' : '📝'}
+                      </span>
+                      <div>
+                        <p className="font-body font-medium" style={{ color: 'var(--text-primary)' }}>{currentProject?.name || 'No Project'}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {currentProject?.type === 'github' 
+                            ? `${currentProject.github?.owner}/${currentProject.github?.repo}`
+                            : 'Local project'} • {Object.keys(currentProject?.chapters || {}).length} chapters • {Object.keys(currentProject?.chats || {}).length} chats
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="pt-6" style={{ borderTop: '1px solid var(--border-color)' }}>
                   <h3 className="font-body text-lg mb-4" style={{ color: 'var(--text-primary)' }}>Data Management</h3>
-                  <div className="flex gap-4">
+                  <div className="flex flex-wrap gap-4">
                     <button
                       onClick={() => {
+                        if (!currentProject) return;
                         const data = {
-                          chats: Storage.get('chats'),
-                          story_bible: Storage.get('story_bible'),
-                          tension_curve: Storage.get('tension_curve'),
-                          chapters: Storage.get('chapters'),
-                          custom_prompts: Storage.get('custom_prompts')
+                          projectId: currentProject.id,
+                          name: currentProject.name,
+                          type: currentProject.type,
+                          storyBible: currentProject.storyBible,
+                          tensionCurve: currentProject.tensionCurve,
+                          disclosures: currentProject.disclosures,
+                          chapters: currentProject.chapters,
+                          customPrompts: currentProject.customPrompts,
+                          referenceLibrary: currentProject.referenceLibrary,
+                          chats: currentProject.chats,
+                          exportedAt: new Date().toISOString()
                         };
                         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = 'syuzhet-export.json';
+                        a.download = `syuzhet-${currentProject.name.toLowerCase().replace(/\s+/g, '-')}.json`;
                         a.click();
                       }}
                       className="font-body text-sm px-4 py-2 rounded transition-colors"
                       style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
                     >
-                      Export Project Data
+                      Export Current Project
                     </button>
                     <button
                       onClick={() => {
-                        if (confirm('Clear all project data? This cannot be undone.')) {
-                          Storage.delete('chats');
-                          Storage.delete('story_bible');
-                          Storage.delete('tension_curve');
-                          Storage.delete('chapters');
-                          window.location.reload();
+                        const data = {
+                          projects: projects,
+                          apiKeys: Storage.get('api_keys'),
+                          theme: Storage.get('theme'),
+                          verifierModel: Storage.get('verifier_model'),
+                          exportedAt: new Date().toISOString()
+                        };
+                        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'syuzhet-all-projects.json';
+                        a.click();
+                      }}
+                      className="font-body text-sm px-4 py-2 rounded transition-colors"
+                      style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
+                    >
+                      Export All Projects
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Clear all data in "${currentProject?.name}"? This cannot be undone.`)) {
+                          onClearProjectData();
                         }
                       }}
                       className="font-body text-sm px-4 py-2 rounded transition-colors"
                       style={{ backgroundColor: 'rgba(139, 41, 66, 0.2)', color: 'var(--accent-crimson)' }}
                     >
-                      Clear All Data
+                      Clear Current Project Data
                     </button>
                   </div>
                 </div>
